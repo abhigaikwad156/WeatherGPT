@@ -1,0 +1,20 @@
+{
+  "irrigation_rainfall_lookahead_mm": null,
+  "irrigation_soil_moisture_sufficient_percent": null,
+  "spray_rainfall_lookahead_mm": null,
+  "spray_min_humidity_percent": null,
+  "spray_max_humidity_percent": null,
+  "spray_max_wind_speed_kph": null,
+  "sowing_min_temperature_celsius": null,
+  "sowing_max_temperature_celsius": null,
+  "sowing_rainfall_min_mm": null,
+  "sowing_rainfall_max_mm": null,
+  "extreme_temperature_low_celsius": null,
+  "extreme_temperature_high_celsius": null,
+  "extreme_rainfall_mm": null,
+  "extreme_wind_speed_kph": null,
+  "crop_profiles": {},
+  "source_notes": {
+    "all": "Production values must be reviewed by a qualified agronomist for the target crop, soil, climate, and farm practice. Null means the rule is not configured."
+  }
+}

@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.venv/
+venv/
+.env
+backend/.env
+postgres_data/
+redis_data/
+frontend/node_modules/
+frontend/dist/
+.vscode/
+.idea/
+Thumbs.db

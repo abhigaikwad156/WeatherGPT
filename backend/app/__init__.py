@@ -1,0 +1,1 @@
+"""WeatherGPT backend application package."""
