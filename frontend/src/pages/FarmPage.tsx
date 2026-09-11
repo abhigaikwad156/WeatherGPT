@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 
 import type { Farm } from "../api/types";
 import { weatherGptApi } from "../api/weatherGpt";
@@ -9,12 +9,14 @@ export function FarmPage() {
   const state = useResource(weatherGptApi.getFarms);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   async function createFarm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     setSaving(true);
     setFormError(null);
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
     try {
       await weatherGptApi.createFarm({
         name: String(form.get("name")).trim(),
@@ -27,7 +29,7 @@ export function FarmPage() {
           ? Number(form.get("soilMoisture"))
           : undefined
       });
-      event.currentTarget.reset();
+      formRef.current?.reset();
       await state.refresh();
     } catch (caught) {
       setFormError(caught instanceof Error ? caught.message : "Unable to save your farm.");
@@ -44,7 +46,7 @@ export function FarmPage() {
       {state.data?.length ? <div className="stack">{state.data.map((farm: Farm) => <Card key={farm.id}><p className="eyebrow">Farm location</p><h2>{farm.name}</h2><p>{farm.latitude}, {farm.longitude}</p><p>{farm.area_hectares ?? "—"} hectares · {farm.soil_type || "Soil not set"} · {farm.irrigation_type || "Irrigation not set"}</p></Card>)}</div> : <Card><EmptyState title="No farm added yet" description="Enter your farm details below so WeatherGPT can use your location." /></Card>}
       <Card className="farm-form-card">
         <div className="card-heading"><div><p className="eyebrow">Farm details</p><h2>Add a farm</h2></div></div>
-        <form className="farm-form" onSubmit={createFarm}>
+        <form ref={formRef} className="farm-form" onSubmit={createFarm}>
           <label>Farm name<input name="name" required minLength={2} placeholder="My farm" /></label>
           <div className="form-row"><label>Latitude<input name="latitude" required type="number" step="any" min="-90" max="90" placeholder="18.52" /></label><label>Longitude<input name="longitude" required type="number" step="any" min="-180" max="180" placeholder="73.85" /></label></div>
           <div className="form-row"><label>Area (hectares)<input name="area" required type="number" step="0.01" min="0.01" placeholder="2" /></label><label>Soil type<input name="soilType" placeholder="Black soil" /></label></div>

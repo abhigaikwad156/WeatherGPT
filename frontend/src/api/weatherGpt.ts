@@ -1,5 +1,5 @@
 import { request } from "./client";
-import type { ChatResponse, DashboardData, Farm } from "./types";
+import type { ChatResponse, Crop, DashboardData, Farm, FarmWeather } from "./types";
 
 export interface AuthTokenResponse {
   access_token: string;
@@ -15,6 +15,10 @@ export interface AuthTokenResponse {
 export const weatherGptApi = {
   getDashboard: () => request<DashboardData>("/dashboard"),
   getFarms: () => request<Farm[]>("/farms"),
+  getFarmWeather: (farmId: string) => request<FarmWeather>(`/farms/${farmId}/weather?refresh=true`),
+  getFarmCrops: (farmId: string) => request<Crop[]>(`/farms/${farmId}/crops`),
+  createCrop: (farmId: string, payload: { name: string; variety?: string; sowing_date?: string; growth_stage?: string }) =>
+    request<Crop>(`/farms/${farmId}/crops`, { method: "POST", body: JSON.stringify(payload) }),
   createFarm: (payload: {
     name: string;
     latitude: number;

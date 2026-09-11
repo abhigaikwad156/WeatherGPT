@@ -51,6 +51,53 @@ export interface Farm {
   soil_moisture_percent: number | null;
 }
 
+export interface Crop {
+  id: string;
+  farm_id: string;
+  name: string;
+  variety: string | null;
+  sowing_date: string | null;
+  growth_stage: string | null;
+  is_active: boolean;
+}
+
+export interface FarmWeather {
+  farm_id: string;
+  provider: string;
+  fetched_at: string;
+  current: {
+    observed_at: string;
+    temperature_celsius: number | null;
+    humidity_percent: number | null;
+    rainfall_mm: number | null;
+    wind_speed_kph: number | null;
+    condition: string | null;
+  } | null;
+  hourly: Array<{
+    observed_at: string;
+    temperature_celsius: number | null;
+    humidity_percent: number | null;
+    rainfall_mm: number | null;
+    wind_speed_kph: number | null;
+    condition: string | null;
+  }>;
+  daily: Array<{
+    forecast_for: string;
+    temperature_min_celsius: number | null;
+    temperature_max_celsius: number | null;
+    precipitation_mm: number | null;
+    rain_probability_percent: number | null;
+    condition: string | null;
+  }>;
+  severe: Array<{
+    title: string;
+    description: string;
+    severity: string;
+    starts_at: string;
+    ends_at: string | null;
+  }>;
+}
+
 export interface ChatCard {
   type: "recommendation" | "weather" | "alert";
   recommendation?: RecommendationItem;
