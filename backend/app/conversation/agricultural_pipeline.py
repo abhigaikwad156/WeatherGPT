@@ -24,11 +24,26 @@ class IntentEntityExtractor:
     """Conservative extraction; it identifies terms but does not make decisions."""
 
     _actions: tuple[tuple[DecisionType, tuple[str, ...]], ...] = (
-        (DecisionType.IRRIGATION, ("irrigat", "water", "पाणी", "सिंचन")),
-        (DecisionType.SPRAYING, ("spray", "pesticide", "फवार", "स्प्रे")),
-        (DecisionType.SOWING_WINDOW, ("sow", "plant", "seed", "पेर", "लाव")),
-        (DecisionType.EXTREME_WEATHER, ("risk", "storm", "frost", "heat", "warning")),
-        (DecisionType.CROP_WEATHER_COMPATIBILITY, ("suitable", "compatible", "fit")),
+        (
+            DecisionType.IRRIGATION,
+            ("irrigat", "water", "पाणी", "सिंचन", "सिंचाई", "पानी"),
+        ),
+        (
+            DecisionType.SPRAYING,
+            ("spray", "pesticide", "फवार", "स्प्रे", "छिड़काव", "कीटनाशक"),
+        ),
+        (
+            DecisionType.SOWING_WINDOW,
+            ("sow", "plant", "seed", "पेर", "लाव", "बोना", "बुवाई"),
+        ),
+        (
+            DecisionType.EXTREME_WEATHER,
+            ("risk", "storm", "frost", "heat", "warning", "वादळ", "तूफान", "लू"),
+        ),
+        (
+            DecisionType.CROP_WEATHER_COMPATIBILITY,
+            ("suitable", "compatible", "fit", "योग्य", "अनुकूल"),
+        ),
     )
 
     def extract(

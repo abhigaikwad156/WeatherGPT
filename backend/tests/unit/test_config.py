@@ -10,4 +10,9 @@ def test_settings_rejects_cors_wildcard() -> None:
 
 
 def test_settings_uses_explicit_local_cors_origin() -> None:
-    assert Settings().cors_origins == ["http://localhost:5173", "http://localhost:5174"]
+    assert Settings().cors_origins == [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ]

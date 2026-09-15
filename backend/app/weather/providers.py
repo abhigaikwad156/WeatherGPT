@@ -111,6 +111,160 @@ class ExternalWeatherProvider:
         )
 
 
+class OpenMeteoWeatherProvider:
+    """Adapter for the free Open-Meteo forecast API."""
+
+    def __init__(self, settings: Settings, client: httpx.Client | None = None) -> None:
+        if not settings.weather_api_url:
+            raise WeatherProviderError("WEATHER_API_URL is required for the Open-Meteo provider")
+        self.settings = settings
+        self.client = client or httpx.Client(timeout=settings.weather_api_timeout_seconds)
+
+    def fetch(self, farm_id: UUID, latitude: float, longitude: float) -> NormalizedWeather:
+        last_error: Exception | None = None
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "timezone": "UTC",
+            "current": (
+                "temperature_2m,relative_humidity_2m,precipitation,"
+                "wind_speed_10m,weather_code"
+            ),
+            "hourly": (
+                "temperature_2m,relative_humidity_2m,precipitation,"
+                "wind_speed_10m,weather_code"
+            ),
+            "forecast_days": 7,
+            "daily": (
+                "temperature_2m_min,temperature_2m_max,precipitation_sum,"
+                "precipitation_probability_max,weather_code"
+            ),
+        }
+        for attempt in range(self.settings.weather_api_retries + 1):
+            try:
+                response = self.client.get(
+                    self.settings.weather_api_url,
+                    params=params,
+                )
+                response.raise_for_status()
+                return self._normalize(farm_id, response.json())
+            except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
+                last_error = error
+                if attempt < self.settings.weather_api_retries:
+                    continue
+        raise WeatherProviderError("Open-Meteo weather request failed") from last_error
+
+    def _normalize(self, farm_id: UUID, payload: Mapping[str, object]) -> NormalizedWeather:
+        try:
+            current_payload = payload["current"]
+            hourly_payload = payload["hourly"]
+            daily_payload = payload["daily"]
+            current = self._current_item(current_payload)
+            hourly = self._series(hourly_payload)
+            daily = self._daily_series(daily_payload)
+            return NormalizedWeather(
+                farm_id=farm_id,
+                provider="open-meteo",
+                fetched_at=datetime.now(UTC),
+                current=current,
+                hourly=hourly,
+                daily=daily,
+                severe=(),
+            )
+        except (KeyError, TypeError, ValueError, IndexError) as error:
+            raise WeatherProviderError("Open-Meteo response has an invalid schema") from error
+
+    @classmethod
+    def _current_item(cls, payload: object) -> HourlyWeather:
+        data = payload if isinstance(payload, Mapping) else {}
+        return HourlyWeather(
+            observed_at=cls._timestamp(data["time"]),
+            temperature_celsius=_number(data.get("temperature_2m")),
+            humidity_percent=_number(data.get("relative_humidity_2m")),
+            rainfall_mm=_number(data.get("precipitation")),
+            wind_speed_kph=_number(data.get("wind_speed_10m")),
+            condition=cls._condition(data.get("weather_code")),
+        )
+
+    @classmethod
+    def _series(cls, payload: object) -> tuple[HourlyWeather, ...]:
+        data = payload if isinstance(payload, Mapping) else {}
+        times = cls._list(data["time"])
+        temperatures = cls._list(data.get("temperature_2m"))
+        humidity = cls._list(data.get("relative_humidity_2m"))
+        rainfall = cls._list(data.get("precipitation"))
+        wind = cls._list(data.get("wind_speed_10m"))
+        codes = cls._list(data.get("weather_code"))
+        return tuple(
+            HourlyWeather(
+                observed_at=cls._timestamp(time),
+                temperature_celsius=_number(cls._at(temperatures, index)),
+                humidity_percent=_number(cls._at(humidity, index)),
+                rainfall_mm=_number(cls._at(rainfall, index)),
+                wind_speed_kph=_number(cls._at(wind, index)),
+                condition=cls._condition(cls._at(codes, index)),
+            )
+            for index, time in enumerate(times)
+        )
+
+    @classmethod
+    def _daily_series(cls, payload: object) -> tuple[DailyWeather, ...]:
+        data = payload if isinstance(payload, Mapping) else {}
+        dates = cls._list(data["time"])
+        minimum = cls._list(data.get("temperature_2m_min"))
+        maximum = cls._list(data.get("temperature_2m_max"))
+        precipitation = cls._list(data.get("precipitation_sum"))
+        probability = cls._list(data.get("precipitation_probability_max"))
+        codes = cls._list(data.get("weather_code"))
+        return tuple(
+            DailyWeather(
+                forecast_for=cls._timestamp(date),
+                temperature_min_celsius=_number(cls._at(minimum, index)),
+                temperature_max_celsius=_number(cls._at(maximum, index)),
+                precipitation_mm=_number(cls._at(precipitation, index)),
+                rain_probability_percent=_number(cls._at(probability, index)),
+                condition=cls._condition(cls._at(codes, index)),
+            )
+            for index, date in enumerate(dates)
+        )
+
+    @staticmethod
+    def _list(value: object) -> list[object]:
+        return value if isinstance(value, list) else []
+
+    @staticmethod
+    def _at(values: list[object], index: int) -> object | None:
+        return values[index] if index < len(values) else None
+
+    @staticmethod
+    def _timestamp(value: object) -> datetime:
+        text = str(value)
+        if len(text) == 10:
+            text = f"{text}T00:00:00"
+        return datetime.fromisoformat(text).replace(tzinfo=UTC)
+
+    @staticmethod
+    def _condition(code: object) -> str | None:
+        if code is None:
+            return None
+        weather_code = int(code)
+        if weather_code == 0:
+            return "clear sky"
+        if weather_code in (1, 2, 3):
+            return "partly cloudy"
+        if weather_code in (45, 48):
+            return "fog"
+        if weather_code in (51, 53, 55, 56, 57):
+            return "drizzle"
+        if weather_code in (61, 63, 65, 66, 67, 80, 81, 82):
+            return "rain"
+        if weather_code in (71, 73, 75, 77, 85, 86):
+            return "snow"
+        if weather_code in (95, 96, 99):
+            return "thunderstorm"
+        return "unknown"
+
+
 class MockWeatherProvider:
     """Deterministic provider for local development and tests."""
 

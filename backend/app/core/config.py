@@ -1,7 +1,12 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Keep local `uvicorn` runs (started from `backend/`) aligned with Docker,
+# which loads the repository-level environment file through docker-compose.
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
@@ -17,15 +22,22 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(min_length=32)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = Field(default=30, gt=0)
-    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:5174"]
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ]
     database_url: str = "postgresql+psycopg://weathergpt:weathergpt@localhost:5432/weathergpt"
     redis_url: str = "redis://localhost:6379/0"
-    weather_provider: str = Field(default="mock", pattern="^(mock|external)$")
+    weather_provider: str = Field(default="mock", pattern="^(mock|external|open_meteo)$")
     weather_api_url: str | None = None
     weather_api_key: str | None = None
     weather_api_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
     weather_api_retries: int = Field(default=2, ge=0, le=5)
     weather_cache_ttl_seconds: int = Field(default=300, gt=0, le=86_400)
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.6-flash"
 
     @field_validator("cors_origins")
     @classmethod
@@ -39,4 +51,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings(_env_file=PROJECT_ROOT / ".env")

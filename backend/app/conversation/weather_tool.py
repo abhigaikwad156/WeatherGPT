@@ -7,7 +7,10 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.domain.models import Farm, WeatherAlert, WeatherForecast, WeatherObservation
+from app.weather.factory import build_provider
+from app.weather.service import WeatherService
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,8 @@ class WeatherTool:
         farm = self._farm()
         if farm is None:
             return None
+        if intent in {"CURRENT_WEATHER", "FORECAST", "RAINFALL"}:
+            self._ensure_weather_data(farm)
         if intent == "CURRENT_WEATHER":
             return self.current_weather(farm)
         if intent == "FORECAST":
@@ -48,7 +53,26 @@ class WeatherTool:
             return self.rainfall(farm)
         if intent == "WEATHER_ALERT":
             return self.alerts(farm)
-        return None
+        return WeatherResult(intent, farm.id, farm.name)
+
+    def _ensure_weather_data(self, farm: Farm) -> None:
+        """Fetch a fresh provider result when this farm has not been hydrated yet."""
+        has_observation = self.session.scalar(
+            select(WeatherObservation.id)
+            .where(WeatherObservation.farm_id == farm.id)
+            .limit(1)
+        )
+        has_forecast = self.session.scalar(
+            select(WeatherForecast.id)
+            .where(WeatherForecast.farm_id == farm.id)
+            .limit(1)
+        )
+        if has_observation is not None or has_forecast is not None:
+            return
+        WeatherService(
+            self.session,
+            build_provider(get_settings()),
+        ).get_weather(farm)
 
     def current_weather(self, farm: Farm) -> WeatherResult:
         observation = self.session.scalar(

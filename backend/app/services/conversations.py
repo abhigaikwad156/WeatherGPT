@@ -12,8 +12,10 @@ from app.conversation.agricultural_tools import (
     DatabaseWeatherContextTool,
 )
 from app.conversation.explanation import WeatherExplanationService
+from app.conversation.gemini import GeminiChatService
 from app.conversation.intents import WeatherIntent, detect_intent
 from app.conversation.weather_tool import WeatherResult, WeatherTool
+from app.core.config import get_settings
 from app.domain.models import Conversation, Message, MessageRole
 from app.schemas.conversation import ConversationMessageRequest
 
@@ -53,7 +55,8 @@ def handle_message(
     session.flush()
 
     agricultural_result = None
-    if _is_agricultural_question(request.content):
+    agricultural_question = _is_agricultural_question(request.content)
+    if agricultural_question:
         try:
             agricultural_result = AgriculturalChatPipeline(
                 DatabaseFarmerContextTool(session),
@@ -72,10 +75,16 @@ def handle_message(
         if agricultural_result is not None
         else WeatherTool(session, user_id, request.farm_id or conversation.farm_id).run(intent)
     )
-    explanation = (
+    fallback_explanation = (
         agricultural_result.explanation
         if agricultural_result is not None
+        else _agricultural_help() if agricultural_question and result is None
         else WeatherExplanationService().explain(result, request.language)
+    )
+    # The saved assistant message must be Gemini's output.  Do not quietly
+    # substitute a rule-based answer when the configured AI provider fails.
+    explanation = GeminiChatService(get_settings()).respond(
+        request.content, request.language, fallback_explanation
     )
     assistant_message = Message(
         conversation_id=conversation.id,
@@ -93,6 +102,7 @@ def _is_agricultural_question(content: str) -> bool:
         term in normalized
         for term in (
             "irrigat",
+            "water",
             "spray",
             "pesticide",
             "sow",
@@ -101,5 +111,22 @@ def _is_agricultural_question(content: str) -> bool:
             "soybean",
             "फवार",
             "पाणी",
+            "सिंचन",
+            "सिंचाई",
+            "पानी",
+            "स्प्रे",
+            "छिड़काव",
+            "कीटनाशक",
+            "पेर",
+            "लाव",
+            "बोना",
+            "बुवाई",
         )
+    )
+
+
+def _agricultural_help() -> str:
+    return (
+        "I can help with irrigation, spraying, sowing, and weather risk. "
+        "Try a specific question such as 'Should I irrigate today?' or 'Is it safe to spray?'"
     )

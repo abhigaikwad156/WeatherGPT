@@ -60,3 +60,13 @@ No vendor-specific API integration is claimed by default.
 weather data for an owned farm. Responses are cached in Redis and useful current/daily data is
 persisted to the weather observation and forecast tables. Redis failures do not make verified
 provider data unavailable; the service falls back to the provider and database.
+cd D:\WeatherGPT\frontend
+>> 
+>> pnpm install
+>> pnpm dev
+
+cd D:\WeatherGPT
+
+Copy-Item .env.example .env
+
+docker compose up --build

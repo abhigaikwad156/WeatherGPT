@@ -1,0 +1,4 @@
+$ vite "--host" "127.0.0.1"
+11:13:51 pm [vite] http proxy error: /api/v1/health
+Error: connect ECONNREFUSED 127.0.0.1:8001
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1636:16)

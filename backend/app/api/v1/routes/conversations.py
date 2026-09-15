@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DatabaseSession
 from app.conversation.agricultural_pipeline import AgriculturalPipelineResult
+from app.conversation.gemini import GeminiError
 from app.schemas.conversation import (
     AgriculturalMetadata,
     ConversationMessageRequest,
@@ -26,26 +27,37 @@ def send_message(
         conversation, message, intent, result = handle_message(session, user.id, request)
     except ConversationNotFoundError:
         raise HTTPException(status_code=404, detail="Conversation not found") from None
+    except GeminiError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
     session.commit()
     session.refresh(message)
+    agricultural_result = result if isinstance(result, AgriculturalPipelineResult) else None
     agricultural = None
-    if isinstance(result, AgriculturalPipelineResult):
+    if agricultural_result is not None:
         agricultural = AgriculturalMetadata(
-            decision_type=result.decision.decision_type.value,
-            decision=result.decision.decision.value,
-            risk_level=result.decision.risk_level.value,
-            confidence=result.decision.confidence,
-            reasons=list(result.decision.reasons),
-            deterministic=result.decision.deterministic,
-            citations=result.citations,
+            decision_type=agricultural_result.decision.decision_type.value,
+            decision=agricultural_result.decision.decision.value,
+            risk_level=agricultural_result.decision.risk_level.value,
+            confidence=agricultural_result.decision.confidence,
+            reasons=list(agricultural_result.decision.reasons),
+            deterministic=agricultural_result.decision.deterministic,
+            citations=agricultural_result.citations,
         )
     metadata = WeatherMetadata(
         intent=intent.value,
         farm_id=(
-            agricultural.farmer.farm_id if agricultural else result.farm_id if result else None
+            agricultural_result.farmer.farm_id
+            if agricultural_result
+            else result.farm_id
+            if result
+            else None
         ),
         farm_name=(
-            agricultural.farmer.farm_name if agricultural else result.farm_name if result else None
+            agricultural_result.farmer.farm_name
+            if agricultural_result
+            else result.farm_name
+            if result
+            else None
         ),
         current=result.current if result and not agricultural else None,
         forecast=result.forecast if result and not agricultural else None,

@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.conversation.agricultural_pipeline import FarmerContext, WeatherContext
@@ -19,9 +19,15 @@ class DatabaseFarmerContextTool:
     ) -> FarmerContext | None:
         statement = (
             select(Farm, FarmerCrop, Crop)
-            .join(FarmerCrop, FarmerCrop.farm_id == Farm.id)
-            .join(Crop, Crop.id == FarmerCrop.crop_id)
-            .where(Farm.owner_id == user_id, FarmerCrop.is_active.is_(True))
+            .outerjoin(
+                FarmerCrop,
+                and_(
+                    FarmerCrop.farm_id == Farm.id,
+                    FarmerCrop.is_active.is_(True),
+                ),
+            )
+            .outerjoin(Crop, Crop.id == FarmerCrop.crop_id)
+            .where(Farm.owner_id == user_id)
         )
         if farm_id is not None:
             statement = statement.where(Farm.id == farm_id)
@@ -38,8 +44,8 @@ class DatabaseFarmerContextTool:
             farm.soil_type,
             farm.irrigation_type,
             float(farm.soil_moisture_percent) if farm.soil_moisture_percent is not None else None,
-            crop_record.name,
-            farmer_crop.growth_stage,
+            crop_record.name if crop_record is not None else None,
+            farmer_crop.growth_stage if farmer_crop is not None else None,
         )
 
 

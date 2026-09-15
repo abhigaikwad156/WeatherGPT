@@ -1,5 +1,6 @@
 """Provider-independent weather service with caching and persistence."""
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.models import Farm, WeatherForecast, WeatherObservation
@@ -33,18 +34,25 @@ class WeatherService:
     def _persist(self, farm: Farm, weather: NormalizedWeather) -> None:
         if weather.current:
             current = weather.current
-            self.session.add(
-                WeatherObservation(
+            observation = self.session.scalar(
+                select(WeatherObservation).where(
+                    WeatherObservation.farm_id == farm.id,
+                    WeatherObservation.observed_at == current.observed_at,
+                    WeatherObservation.provider == weather.provider,
+                )
+            )
+            if observation is None:
+                observation = WeatherObservation(
                     farm_id=farm.id,
                     observed_at=current.observed_at,
                     provider=weather.provider,
-                    condition=current.condition,
-                    temperature_celsius=current.temperature_celsius,
-                    humidity_percent=current.humidity_percent,
-                    rainfall_mm=current.rainfall_mm,
-                    wind_speed_kph=current.wind_speed_kph,
                 )
-            )
+                self.session.add(observation)
+            observation.condition = current.condition
+            observation.temperature_celsius = current.temperature_celsius
+            observation.humidity_percent = current.humidity_percent
+            observation.rainfall_mm = current.rainfall_mm
+            observation.wind_speed_kph = current.wind_speed_kph
         issued_at = weather.fetched_at
         for item in weather.daily:
             self.session.add(
