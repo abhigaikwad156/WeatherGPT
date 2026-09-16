@@ -2,7 +2,14 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.agriculture.engine import AgriculturalDecisionEngine
-from app.agriculture.thresholds import AgriculturalThresholds, CropProfile
+from app.agriculture.thresholds import (
+    AgriculturalThresholds,
+    CropProfile,
+    IrrigationForecast,
+    IrrigationProfile,
+    IrrigationProfileSource,
+    IrrigationSoilMoisture,
+)
 from app.agriculture.types import DecisionType, DecisionValue, WeatherSnapshot
 from app.conversation.agricultural_pipeline import (
     AgriculturalChatPipeline,
@@ -27,17 +34,35 @@ class FarmerTool:
 
 
 class WeatherTool:
-    def get_context(self, farm_id: object) -> WeatherContext:
+    def get_context(self, farm_id: object, *, forecast_horizon_days: int = 3) -> WeatherContext:
         return WeatherContext(
-            4, 12, 24, 60, 8, forecast_weather=(WeatherSnapshot(datetime.now(UTC), rainfall_mm=12),)
+            4,
+            12,
+            24,
+            60,
+            8,
+            forecast_horizon_days,
+            forecast_weather=(WeatherSnapshot(datetime.now(UTC), rainfall_mm=12),),
         )
 
 
 def engine() -> AgriculturalDecisionEngine:
     return AgriculturalDecisionEngine(
         AgriculturalThresholds(
-            irrigation_rainfall_lookahead_mm=10,
-            irrigation_soil_moisture_sufficient_percent=60,
+            # Numeric values here are isolated test fixtures; production JSON
+            # intentionally contains no irrigation-profile threshold values.
+            irrigation_profiles=(
+                IrrigationProfile(
+                    crop="soybean",
+                    growth_stage="vegetative",
+                    soil_type="loam",
+                    irrigation_type="drip",
+                    region="Pune",
+                    soil_moisture=IrrigationSoilMoisture(sufficient_percent=60),
+                    forecast=IrrigationForecast(rainfall_lookahead_mm=10, horizon_days=3),
+                    source=IrrigationProfileSource(reviewed_by="Test agronomist"),
+                ),
+            ),
             spray_rainfall_lookahead_mm=2,
             spray_min_humidity_percent=40,
             spray_max_humidity_percent=80,

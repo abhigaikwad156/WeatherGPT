@@ -71,7 +71,9 @@ class DatabaseWeatherContextTool:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def get_context(self, farm_id: UUID) -> WeatherContext:
+    def get_context(self, farm_id: UUID, *, forecast_horizon_days: int = 3) -> WeatherContext:
+        if forecast_horizon_days <= 0:
+            raise ValueError("forecast_horizon_days must be positive")
         now = datetime.now(UTC)
         observation = self.session.scalar(
             select(WeatherObservation)
@@ -91,7 +93,7 @@ class DatabaseWeatherContextTool:
             .where(
                 WeatherForecast.farm_id == farm_id,
                 WeatherForecast.forecast_for >= now,
-                WeatherForecast.forecast_for <= now + timedelta(days=3),
+                WeatherForecast.forecast_for <= now + timedelta(days=forecast_horizon_days),
             )
             .order_by(WeatherForecast.forecast_for.asc())
         ).all()
@@ -113,6 +115,7 @@ class DatabaseWeatherContextTool:
                 if observation and observation.wind_speed_kph is not None
                 else None
             ),
+            forecast_horizon_days=forecast_horizon_days,
             historical_weather=tuple(
                 WeatherSnapshot(
                     item.observed_at,

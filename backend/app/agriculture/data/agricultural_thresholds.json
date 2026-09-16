@@ -1,6 +1,5 @@
 {
-  "irrigation_rainfall_lookahead_mm": null,
-  "irrigation_soil_moisture_sufficient_percent": null,
+  "irrigation_profiles": [],
   "spray_rainfall_lookahead_mm": null,
   "spray_min_humidity_percent": null,
   "spray_max_humidity_percent": null,
@@ -15,6 +14,7 @@
   "extreme_wind_speed_kph": null,
   "crop_profiles": {},
   "source_notes": {
-    "all": "Production values must be reviewed by a qualified agronomist for the target crop, soil, climate, and farm practice. Null means the rule is not configured."
+    "all": "Production values must be reviewed by a qualified agronomist for the target crop, growth stage, soil, region, and farm practice. Null means the rule is not configured.",
+    "irrigation_profiles": "Irrigation has no global fallback. A matching crop-specific profile must provide reviewed soil-moisture and forecast thresholds before the engine can return APPLY or WAIT."
   }
 }

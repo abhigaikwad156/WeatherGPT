@@ -50,12 +50,16 @@ class AgriculturalInputs:
     growth_stage: str | None = None
     soil_type: str | None = None
     irrigation_type: str | None = None
+    region: str | None = None
     recent_rainfall_mm: float | None = None
     forecast_rainfall_mm: float | None = None
+    forecast_horizon_days: int | None = 3
     temperature_celsius: float | None = None
     humidity_percent: float | None = None
     wind_speed_kph: float | None = None
     soil_moisture_percent: float | None = None
+    soil_moisture_measurement_basis: str | None = None
+    soil_moisture_sensor_depth_cm: float | None = None
     historical_weather: tuple[WeatherSnapshot, ...] = ()
     forecast_weather: tuple[WeatherSnapshot, ...] = ()
 

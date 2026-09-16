@@ -6,6 +6,7 @@ from typing import Protocol
 from uuid import UUID
 
 from app.agriculture.engine import AgriculturalDecisionEngine
+from app.agriculture.irrigation import matching_irrigation_profile
 from app.agriculture.types import AgriculturalInputs, Decision, DecisionType, WeatherSnapshot
 from app.rag.retrieval import RetrievalService
 from app.rag.types import RetrievedChunk
@@ -115,6 +116,7 @@ class WeatherContext:
     temperature_celsius: float | None
     humidity_percent: float | None
     wind_speed_kph: float | None
+    forecast_horizon_days: int = 3
     historical_weather: tuple[WeatherSnapshot, ...] = ()
     forecast_weather: tuple[WeatherSnapshot, ...] = ()
 
@@ -128,7 +130,7 @@ class FarmerContextTool(Protocol):
 
 
 class WeatherContextTool(Protocol):
-    def get_context(self, farm_id: UUID) -> WeatherContext: ...
+    def get_context(self, farm_id: UUID, *, forecast_horizon_days: int = 3) -> WeatherContext: ...
 
 
 class AgriculturalExplanation(Protocol):
@@ -283,14 +285,35 @@ class AgriculturalChatPipeline:
             raise ValueError("No matching farmer crop is available for this question")
         if entities.requested_action is None:
             raise ValueError("The requested agricultural action could not be identified")
-        weather = self.weather_tool.get_context(farmer.farm_id)
+        profile = matching_irrigation_profile(
+            AgriculturalInputs(
+                crop=farmer.crop,
+                growth_stage=farmer.growth_stage,
+                soil_type=farmer.soil_type,
+                irrigation_type=farmer.irrigation_type,
+                region=farmer.location,
+            ),
+            self.decision_engine.thresholds,
+        )
+        forecast_horizon_days = (
+            profile.forecast.horizon_days
+            if entities.requested_action == DecisionType.IRRIGATION
+            and profile is not None
+            and profile.forecast.horizon_days is not None
+            else 3
+        )
+        weather = self.weather_tool.get_context(
+            farmer.farm_id, forecast_horizon_days=forecast_horizon_days
+        )
         agricultural_inputs = AgriculturalInputs(
             crop=farmer.crop,
             growth_stage=farmer.growth_stage,
             soil_type=farmer.soil_type,
             irrigation_type=farmer.irrigation_type,
+            region=farmer.location,
             recent_rainfall_mm=weather.recent_rainfall_mm,
             forecast_rainfall_mm=weather.forecast_rainfall_mm,
+            forecast_horizon_days=weather.forecast_horizon_days,
             temperature_celsius=weather.temperature_celsius,
             humidity_percent=weather.humidity_percent,
             wind_speed_kph=weather.wind_speed_kph,

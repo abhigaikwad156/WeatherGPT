@@ -22,25 +22,31 @@ or add weather facts that were not supplied by a trusted weather provider.
 
 ## Configuration and scientific safety
 
-Rules are configured in
+Rules other than irrigation are configured in
 [`agricultural_thresholds.json`](../backend/app/agriculture/data/agricultural_thresholds.json).
-The shipped file intentionally contains `null` values and no crop profiles. This avoids
+The shipped file intentionally contains `null` values and no irrigation profiles. This avoids
 presenting universal agronomic thresholds as scientific facts. A deployment must populate
-the values with thresholds reviewed for its crops, soil types, climate, irrigation
-practice, and spray product.
+profiles only with values reviewed for their crop, growth stage, soil type, region,
+irrigation practice, and sensor contract.
 
 An unset value disables that rule. The engine returns `NEEDS_INPUT` rather than silently
-falling back to a guessed threshold. Tests inject an explicit `AgriculturalThresholds`
-object so rule behavior is reproducible and reviewable.
+falling back to a guessed threshold. Tests inject explicit fixture-only
+`AgriculturalThresholds` objects so rule behavior is reproducible and reviewable.
 
 ## Rules
 
 ### Irrigation
 
-The engine waits when configured soil moisture is at or above the configured sufficiency
-threshold, or when forecast rainfall meets the configured lookahead threshold. Otherwise,
-when required inputs and thresholds exist, it recommends applying irrigation. Missing soil
-moisture and rainfall evidence produces `NEEDS_INPUT`.
+The engine first selects one unambiguous, crop-specific irrigation profile. Profiles can be
+scoped by growth stage, soil type, irrigation type, and region; there is no global irrigation
+fallback. A profile also records its soil-moisture measurement basis and sensor depth, its
+forecast horizon, and reviewable source metadata. A profile must identify a reviewer and cannot
+be effective in the future before it is eligible for a decision.
+
+The engine returns `NEEDS_INPUT` when no profile matches, either numerical threshold remains
+null, or soil-moisture or forecast-rainfall evidence is missing. It waits when soil moisture
+is at or above the profile sufficiency threshold, or forecast rainfall meets the profile
+lookahead threshold; only then can it recommend applying irrigation.
 
 ### Spraying
 

@@ -1,7 +1,14 @@
 from datetime import UTC, datetime
 
 from app.agriculture.engine import AgriculturalDecisionEngine
-from app.agriculture.thresholds import AgriculturalThresholds, CropProfile
+from app.agriculture.thresholds import (
+    AgriculturalThresholds,
+    CropProfile,
+    IrrigationForecast,
+    IrrigationProfile,
+    IrrigationProfileSource,
+    IrrigationSoilMoisture,
+)
 from app.agriculture.types import (
     AgriculturalInputs,
     DecisionType,
@@ -11,10 +18,29 @@ from app.agriculture.types import (
 )
 
 
-def thresholds() -> AgriculturalThresholds:
+def irrigation_profile(**changes: object) -> IrrigationProfile:
+    """Reviewed numeric values in this helper are test fixtures, not production guidance."""
+    base = IrrigationProfile(
+        crop="wheat",
+        growth_stage="vegetative",
+        soil_type="loam",
+        irrigation_type="drip",
+        region="Pune",
+        soil_moisture=IrrigationSoilMoisture(sufficient_percent=60),
+        forecast=IrrigationForecast(rainfall_lookahead_mm=10, horizon_days=3),
+        source=IrrigationProfileSource(
+            publisher="Test Agriculture Department",
+            document_title="Test irrigation profile",
+            source_uri="https://example.invalid/test-profile",
+            reviewed_by="Test agronomist",
+        ),
+    )
+    return IrrigationProfile(**{**base.__dict__, **changes})
+
+
+def thresholds(*, profiles: tuple[IrrigationProfile, ...] | None = None) -> AgriculturalThresholds:
     return AgriculturalThresholds(
-        irrigation_rainfall_lookahead_mm=10,
-        irrigation_soil_moisture_sufficient_percent=60,
+        irrigation_profiles=profiles if profiles is not None else (irrigation_profile(),),
         spray_rainfall_lookahead_mm=2,
         spray_min_humidity_percent=40,
         spray_max_humidity_percent=80,
@@ -36,6 +62,7 @@ def inputs(**changes: object) -> AgriculturalInputs:
         growth_stage="vegetative",
         soil_type="loam",
         irrigation_type="drip",
+        region="Pune",
         recent_rainfall_mm=4,
         forecast_rainfall_mm=12,
         temperature_celsius=24,
@@ -53,6 +80,52 @@ def test_irrigation_waits_when_rainfall_is_expected() -> None:
     assert result.deterministic is True
     assert result.ml_prediction is None
     assert result.llm_explanation is None
+
+
+def test_irrigation_needs_input_when_no_matching_profile_exists() -> None:
+    result = AgriculturalDecisionEngine(thresholds()).evaluate(inputs(crop="onion"))[
+        DecisionType.IRRIGATION
+    ]
+
+    assert result.decision == DecisionValue.NEEDS_INPUT
+    assert result.reasons == ("No matching crop-specific irrigation profile is configured",)
+
+
+def test_irrigation_needs_input_when_matching_profile_has_null_threshold() -> None:
+    unreviewed = irrigation_profile(
+        forecast=IrrigationForecast(rainfall_lookahead_mm=None, horizon_days=3)
+    )
+    result = AgriculturalDecisionEngine(thresholds(profiles=(unreviewed,))).evaluate(inputs())[
+        DecisionType.IRRIGATION
+    ]
+
+    assert result.decision == DecisionValue.NEEDS_INPUT
+    assert result.reasons == ("Matching irrigation profile has unreviewed threshold values",)
+
+
+def test_irrigation_needs_input_when_soil_moisture_is_missing() -> None:
+    result = AgriculturalDecisionEngine(thresholds()).evaluate(inputs(soil_moisture_percent=None))[
+        DecisionType.IRRIGATION
+    ]
+
+    assert result.decision == DecisionValue.NEEDS_INPUT
+    assert result.reasons == ("Soil-moisture measurement is required for this irrigation profile",)
+
+
+def test_irrigation_waits_when_soil_moisture_is_sufficient() -> None:
+    result = AgriculturalDecisionEngine(thresholds()).evaluate(
+        inputs(soil_moisture_percent=60, forecast_rainfall_mm=0)
+    )[DecisionType.IRRIGATION]
+
+    assert result.decision == DecisionValue.WAIT
+
+
+def test_irrigation_applies_when_neither_profile_signal_is_sufficient() -> None:
+    result = AgriculturalDecisionEngine(thresholds()).evaluate(
+        inputs(soil_moisture_percent=40, forecast_rainfall_mm=0)
+    )[DecisionType.IRRIGATION]
+
+    assert result.decision == DecisionValue.APPLY
 
 
 def test_spraying_waits_in_high_wind() -> None:
