@@ -8,7 +8,7 @@ from uuid import UUID
 from app.agriculture.engine import AgriculturalDecisionEngine
 from app.agriculture.types import AgriculturalInputs, Decision, DecisionType, WeatherSnapshot
 from app.rag.retrieval import RetrievalService
-from app.rag.types import RetrievalFilter, RetrievedChunk
+from app.rag.types import RetrievedChunk
 
 
 @dataclass(frozen=True)
@@ -45,6 +45,14 @@ class IntentEntityExtractor:
             ("suitable", "compatible", "fit", "योग्य", "अनुकूल"),
         ),
     )
+    # This small vocabulary prevents a question about a crop that is not active on
+    # the selected farm (for example, "wheat" on a soybean farm) from silently
+    # being evaluated as the farm's first crop.  Farm crops still take priority.
+    _common_crops = (
+        "rice", "wheat", "maize", "corn", "soybean", "cotton", "sugarcane",
+        "chickpea", "gram", "pigeon pea", "tomato", "potato", "onion",
+        "groundnut", "millet", "sorghum",
+    )
 
     def extract(
         self,
@@ -63,18 +71,28 @@ class IntentEntityExtractor:
             ),
             None,
         )
-        crop = next((item for item in known_crops if item.casefold() in normalized), None)
+        crops = tuple(dict.fromkeys((*known_crops, *self._common_crops)))
+        crop = next((item for item in crops if item.casefold() in normalized), None)
+        # A crop/farm-weather question without a named action is still useful to
+        # route through the compatibility rule.  It avoids falling back to a
+        # generic weather answer that discards the farmer's context.
+        if action is None and any(
+            term in normalized
+            for term in (
+                "crop", "farm", "field", "growing", "disease", "pest", "fertil",
+                "harvest", "yield", "पीक", "शेत", "फसल", "खेती",
+            )
+        ):
+            action = DecisionType.CROP_WEATHER_COMPATIBILITY
         return ExtractedEntities(
             location=profile_location,
             crop=crop,
             growth_stage=growth_stage,
             requested_action=action,
-            knowledge_required=action
-            in {
-                DecisionType.SPRAYING,
-                DecisionType.SOWING_WINDOW,
-                DecisionType.CROP_WEATHER_COMPATIBILITY,
-            },
+            # Retrieved material complements every deterministic decision; it
+            # never replaces its verdict.  This is especially useful for safe
+            # follow-up steps after irrigation and weather-risk decisions.
+            knowledge_required=action is not None,
         )
 
 
@@ -106,6 +124,8 @@ class FarmerContextTool(Protocol):
         self, user_id: UUID, farm_id: UUID | None, crop: str | None
     ) -> FarmerContext | None: ...
 
+    def list_crops(self, user_id: UUID, farm_id: UUID | None) -> tuple[str, ...]: ...
+
 
 class WeatherContextTool(Protocol):
     def get_context(self, farm_id: UUID) -> WeatherContext: ...
@@ -117,6 +137,7 @@ class AgriculturalExplanation(Protocol):
         question: str,
         decision: Decision,
         farmer: FarmerContext,
+        weather: WeatherContext,
         retrieved: list[RetrievedChunk],
         language: str,
     ) -> str: ...
@@ -130,10 +151,68 @@ class GroundedExplanation:
         question: str,
         decision: Decision,
         farmer: FarmerContext,
+        weather: WeatherContext,
         retrieved: list[RetrievedChunk],
         language: str,
     ) -> str:
-        explanation = f"{decision.decision.value}: {'; '.join(decision.reasons)}"
+        farm_details = ", ".join(
+            f"{label}={value}"
+            for label, value in (
+                ("farm", farmer.farm_name),
+                ("location", farmer.location),
+                ("crop", farmer.crop),
+                ("growth stage", farmer.growth_stage),
+                ("soil", farmer.soil_type),
+                ("irrigation", farmer.irrigation_type),
+                (
+                    "soil moisture",
+                    f"{farmer.soil_moisture_percent}%"
+                    if farmer.soil_moisture_percent is not None
+                    else None,
+                ),
+            )
+            if value is not None
+        )
+        weather_pairs = (
+            (
+                "recent rainfall",
+                f"{weather.recent_rainfall_mm} mm"
+                if weather.recent_rainfall_mm is not None
+                else None,
+            ),
+            (
+                "forecast rainfall",
+                f"{weather.forecast_rainfall_mm} mm"
+                if weather.forecast_rainfall_mm is not None
+                else None,
+            ),
+            (
+                "temperature",
+                f"{weather.temperature_celsius}°C"
+                if weather.temperature_celsius is not None
+                else None,
+            ),
+            (
+                "humidity",
+                f"{weather.humidity_percent}%" if weather.humidity_percent is not None else None,
+            ),
+            (
+                "wind",
+                f"{weather.wind_speed_kph} kph" if weather.wind_speed_kph is not None else None,
+            ),
+        )
+        weather_details = ", ".join(
+            f"{label}={value}"
+            for label, value in weather_pairs
+            if value is not None
+        )
+        explanation = (
+            f"Decision: {decision.decision.value}. Reasons: {'; '.join(decision.reasons)}."
+        )
+        if farm_details:
+            explanation += f" Farm context: {farm_details}."
+        if weather_details:
+            explanation += f" Verified weather: {weather_details}."
         if retrieved:
             sources = ", ".join(item.chunk.metadata.title for item in retrieved)
             explanation += f" Verified guidance: {sources}."
@@ -191,9 +270,11 @@ class AgriculturalChatPipeline:
         initial = self.farmer_tool.get_context(user_id, farm_id, None)
         if initial is None:
             raise ValueError("No owned farm is available for this question")
+        list_crops = getattr(self.farmer_tool, "list_crops", None)
+        known_crops = list_crops(user_id, farm_id) if callable(list_crops) else ()
         entities = self.extractor.extract(
             question,
-            known_crops=(initial.crop,) if initial.crop else (),
+            known_crops=known_crops or ((initial.crop,) if initial.crop else ()),
             profile_location=initial.location,
             growth_stage=initial.growth_stage,
         )
@@ -220,11 +301,18 @@ class AgriculturalChatPipeline:
         decision = self.decision_engine.evaluate(agricultural_inputs)[entities.requested_action]
         retrieved: list[RetrievedChunk] = []
         if entities.knowledge_required and self.retrieval_service:
-            retrieved = self.retrieval_service.retrieve(
-                question,
-                filters=RetrievalFilter(language=language),
+            retrieval_query = self._retrieval_query(question, farmer, weather, entities)
+            # Run one vector search, then prefer same-language material in its
+            # ranked results. This keeps cross-language fallbacks available
+            # without a second query when official guidance is English-only.
+            candidates = self.retrieval_service.retrieve(retrieval_query)
+            retrieved = sorted(
+                candidates,
+                key=lambda item: (item.chunk.metadata.language != language, -item.score),
             )
-        explanation = self.explanation.explain(question, decision, farmer, retrieved, language)
+        explanation = self.explanation.explain(
+            question, decision, farmer, weather, retrieved, language
+        )
         return AgriculturalPipelineResult(
             entities,
             farmer,
@@ -233,4 +321,33 @@ class AgriculturalChatPipeline:
             tuple(retrieved),
             explanation,
             datetime.now(UTC),
+        )
+
+    @staticmethod
+    def _retrieval_query(
+        question: str,
+        farmer: FarmerContext,
+        weather: WeatherContext,
+        entities: ExtractedEntities,
+    ) -> str:
+        return " ".join(
+            str(value)
+            for value in (
+                question,
+                entities.requested_action.value if entities.requested_action else None,
+                farmer.crop,
+                farmer.growth_stage,
+                farmer.soil_type,
+                farmer.irrigation_type,
+                f"soil moisture {farmer.soil_moisture_percent} percent"
+                if farmer.soil_moisture_percent is not None
+                else None,
+                f"rainfall {weather.recent_rainfall_mm} mm"
+                if weather.recent_rainfall_mm is not None
+                else None,
+                f"forecast rainfall {weather.forecast_rainfall_mm} mm"
+                if weather.forecast_rainfall_mm is not None
+                else None,
+            )
+            if value
         )

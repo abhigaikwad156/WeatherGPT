@@ -17,6 +17,9 @@ from app.conversation.intents import WeatherIntent, detect_intent
 from app.conversation.weather_tool import WeatherResult, WeatherTool
 from app.core.config import get_settings
 from app.domain.models import Conversation, Message, MessageRole
+from app.rag.embeddings import HashEmbeddingProvider
+from app.rag.postgres import PgVectorChunkRepository
+from app.rag.retrieval import RetrievalService
 from app.schemas.conversation import ConversationMessageRequest
 
 
@@ -62,6 +65,7 @@ def handle_message(
                 DatabaseFarmerContextTool(session),
                 DatabaseWeatherContextTool(session),
                 AgriculturalDecisionEngine(),
+                _retrieval_service(session),
             ).answer(
                 user_id,
                 request.content,
@@ -108,6 +112,22 @@ def _is_agricultural_question(content: str) -> bool:
             "sow",
             "plant",
             "seed",
+            "crop",
+            "farm",
+            "field",
+            "growing",
+            "disease",
+            "pest",
+            "fertil",
+            "harvest",
+            "yield",
+            "risk",
+            "suitable",
+            "compatible",
+            "पीक",
+            "शेत",
+            "फसल",
+            "खेती",
             "soybean",
             "फवार",
             "पाणी",
@@ -123,6 +143,12 @@ def _is_agricultural_question(content: str) -> bool:
             "बुवाई",
         )
     )
+
+
+def _retrieval_service(session: Session) -> RetrievalService:
+    """Build the pgvector-backed RAG service with the migration's 1536 dimensions."""
+    repository = PgVectorChunkRepository(session.get_bind())
+    return RetrievalService(repository, HashEmbeddingProvider(1536))
 
 
 def _agricultural_help() -> str:

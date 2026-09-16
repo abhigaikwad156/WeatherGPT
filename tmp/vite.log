@@ -1,0 +1,11 @@
+
+> weathergpt-frontend@0.1.0 dev
+> vite --host 127.0.0.1
+
+
+  VITE v8.2.2  ready in 1792 ms
+
+  ➜  Local:   http://127.0.0.1:5173/
+  ➜  press h + enter to show help
+7:16:28 pm [vite] vite.config.ts changed, restarting server...
+7:16:29 pm [vite] server restarted.

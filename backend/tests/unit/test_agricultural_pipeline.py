@@ -97,3 +97,38 @@ def test_agricultural_knowledge_is_retrieved_with_citations() -> None:
     assert result.retrieved
     assert result.citations[0]["source_id"] == "spray-1"
     assert "Spraying guide" in result.explanation
+
+
+def test_generic_crop_question_keeps_farm_and_weather_context() -> None:
+    result = pipeline().answer(
+        USER_ID,
+        "How is the weather affecting my crop today?",
+        language="en",
+        farm_id=FARM_ID,
+    )
+
+    assert result.entities.requested_action == DecisionType.CROP_WEATHER_COMPATIBILITY
+    assert "Farm context: farm=Green Farm" in result.explanation
+    assert "crop=soybean" in result.explanation
+    assert "Verified weather: recent rainfall=4 mm" in result.explanation
+    assert "forecast rainfall=12 mm" in result.explanation
+
+
+def test_retrieval_query_includes_crop_farm_and_weather_signals() -> None:
+    result = pipeline().answer(
+        USER_ID, "Should I irrigate my soybean tomorrow?", language="en", farm_id=FARM_ID
+    )
+    query = AgriculturalChatPipeline._retrieval_query(
+        "Should I irrigate my soybean tomorrow?",
+        result.farmer,
+        result.weather,
+        result.entities,
+    )
+
+    assert "irrigation" in query
+    assert "soybean" in query
+    assert "vegetative" in query
+    assert "loam" in query
+    assert "drip" in query
+    assert "soil moisture 40 percent" in query
+    assert "forecast rainfall 12 mm" in query
