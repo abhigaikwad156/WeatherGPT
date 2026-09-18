@@ -51,6 +51,23 @@ export interface Farm {
   soil_moisture_percent: number | null;
 }
 
+export interface CurrentLocation {
+  latitude: number | string;
+  longitude: number | string;
+  accuracy_meters: number | string | null;
+  updated_at: string;
+  location_name?: string | null;
+}
+
+export interface FarmLocation {
+  latitude: number | string;
+  longitude: number | string;
+  accuracy_meters: number | string | null;
+  location_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Crop {
   id: string;
   farm_id: string;

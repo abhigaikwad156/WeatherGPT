@@ -3,13 +3,14 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import CheckConstraint, Index, inspect
 
-from app.domain.models import Farm, User
+from app.domain.models import Farm, User, UserCurrentLocation
 from app.infrastructure.database import Base
 
 
 def test_all_expected_domain_tables_are_registered() -> None:
     assert {
         "users",
+        "user_current_locations",
         "farms",
         "crops",
         "farmer_crops",
@@ -45,8 +46,26 @@ def test_farm_has_coordinate_constraints_and_spatial_index() -> None:
     }
     indexes = {index.name for index in Farm.__table__.indexes if isinstance(index, Index)}
 
-    assert {"ck_farms_latitude_range", "ck_farms_longitude_range"}.issubset(constraints)
+    assert {
+        "ck_farms_latitude_range",
+        "ck_farms_longitude_range",
+        "ck_farms_location_accuracy_positive",
+    }.issubset(constraints)
     assert "ix_farms_location" in indexes
+
+
+def test_current_location_has_coordinate_and_accuracy_constraints() -> None:
+    constraints = {
+        constraint.name
+        for constraint in UserCurrentLocation.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+
+    assert {
+        "ck_user_current_locations_latitude_range",
+        "ck_user_current_locations_longitude_range",
+        "ck_user_current_locations_accuracy_positive",
+    }.issubset(constraints)
 
 
 def test_core_relationships_are_configured() -> None:

@@ -20,6 +20,10 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     }
   });
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem("weathergpt_access_token");
+      window.dispatchEvent(new Event("weathergpt:unauthorized"));
+    }
     const body = (await response.json().catch(() => null)) as
       | { error?: { message?: string }; detail?: string | { msg?: string }[] }
       | null;

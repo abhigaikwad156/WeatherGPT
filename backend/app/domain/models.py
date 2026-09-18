@@ -81,6 +81,9 @@ class User(TimestampMixin, Base):
     recommendations: Mapped[list["Recommendation"]] = relationship(back_populates="user")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="user")
     messages: Mapped[list["Message"]] = relationship(back_populates="sender")
+    current_device_location: Mapped["UserCurrentLocation | None"] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
 
     @validates("email")
     def validate_email(self, _: str, value: str) -> str:
@@ -88,6 +91,33 @@ class User(TimestampMixin, Base):
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
             raise ValueError("email must be a valid email address")
         return normalized
+
+
+class UserCurrentLocation(TimestampMixin, Base):
+    """The most recently submitted device location for one authenticated user."""
+
+    __tablename__ = "user_current_locations"
+    __table_args__ = (
+        CheckConstraint(
+            "latitude BETWEEN -90 AND 90", name="ck_user_current_locations_latitude_range"
+        ),
+        CheckConstraint(
+            "longitude BETWEEN -180 AND 180", name="ck_user_current_locations_longitude_range"
+        ),
+        CheckConstraint(
+            "accuracy_meters IS NULL OR accuracy_meters > 0",
+            name="ck_user_current_locations_accuracy_positive",
+        ),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    latitude: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False)
+    longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
+    accuracy_meters: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+
+    user: Mapped[User] = relationship(back_populates="current_device_location")
 
 
 class Farm(TimestampMixin, Base):
@@ -98,6 +128,10 @@ class Farm(TimestampMixin, Base):
         CheckConstraint(
             "soil_moisture_percent IS NULL OR soil_moisture_percent BETWEEN 0 AND 100",
             name="ck_farms_soil_moisture_range",
+        ),
+        CheckConstraint(
+            "location_accuracy_meters IS NULL OR location_accuracy_meters > 0",
+            name="ck_farms_location_accuracy_positive",
         ),
         Index("ix_farms_location", "location", postgresql_using="gist"),
     )
@@ -112,6 +146,8 @@ class Farm(TimestampMixin, Base):
     location: Mapped[object] = mapped_column(
         Geography(geometry_type="POINT", srid=4326, spatial_index=False), nullable=False
     )
+    location_name: Mapped[str | None] = mapped_column(String(160))
+    location_accuracy_meters: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     area_hectares: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     soil_type: Mapped[str | None] = mapped_column(String(80))
     irrigation_type: Mapped[str | None] = mapped_column(String(80))

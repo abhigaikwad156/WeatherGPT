@@ -27,16 +27,17 @@ def _error_response(
             "details": details,
         }
     )
-    return JSONResponse(status_code=status_code, content=payload.model_dump(exclude_none=True))
+    return JSONResponse(
+        status_code=status_code,
+        content=payload.model_dump(exclude_none=True, mode="json"),
+    )
 
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register a consistent, non-leaking API error contract."""
 
     @app.exception_handler(StarletteHTTPException)
-    async def http_exception_handler(
-        request: Request, exc: StarletteHTTPException
-    ) -> JSONResponse:
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         message = exc.detail if isinstance(exc.detail, str) else "Request failed"
         return _error_response(
             request,

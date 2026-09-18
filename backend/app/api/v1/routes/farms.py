@@ -15,6 +15,12 @@ from app.schemas.farm import (
     FarmResponse,
     FarmUpdate,
 )
+from app.schemas.location import FarmLocationResponse, FarmLocationUpdate
+from app.services.locations import (
+    copy_current_location_to_farm,
+    get_current_location,
+    update_farm_location,
+)
 from app.services.profiles import (
     create_crop,
     create_farm,
@@ -25,6 +31,17 @@ from app.services.profiles import (
 )
 
 router = APIRouter(prefix="/farms")
+
+
+def _farm_location_response(farm: Farm) -> FarmLocationResponse:
+    return FarmLocationResponse(
+        latitude=farm.latitude,
+        longitude=farm.longitude,
+        accuracy_meters=farm.location_accuracy_meters,
+        location_name=farm.location_name,
+        created_at=farm.created_at,
+        updated_at=farm.updated_at,
+    )
 
 
 def _crop_response(crop: FarmerCrop) -> CropResponse:
@@ -53,6 +70,78 @@ def create_owned_farm(
 def list_owned_farms(user: CurrentUser, session: DatabaseSession) -> list[FarmResponse]:
     farms = session.scalars(select(Farm).where(Farm.owner_id == user.id)).all()
     return [FarmResponse.model_validate(farm) for farm in farms]
+
+
+@router.put(
+    "/{farm_id}/location",
+    response_model=FarmLocationResponse,
+    summary="Set an owned farm's permanent location",
+    responses={
+        401: {"description": "Missing, invalid, or expired bearer token"},
+        404: {"description": "Farm not found or not owned by the authenticated user"},
+        422: {"description": "Latitude, longitude, or accuracy is invalid"},
+    },
+)
+def set_owned_farm_location(
+    farm_id: UUID, request: FarmLocationUpdate, user: CurrentUser, session: DatabaseSession
+) -> FarmLocationResponse:
+    """Set coordinates and optional user/provider-supplied location metadata on an owned farm."""
+
+    farm = get_owned_farm(session, user.id, farm_id)
+    if farm is None:
+        raise HTTPException(status_code=404, detail="Farm not found")
+    update_farm_location(farm, request)
+    session.commit()
+    session.refresh(farm)
+    return _farm_location_response(farm)
+
+
+@router.post(
+    "/{farm_id}/location/from-current",
+    response_model=FarmLocationResponse,
+    summary="Use the authenticated user's stored current location for an owned farm",
+    responses={
+        401: {"description": "Missing, invalid, or expired bearer token"},
+        404: {
+            "description": (
+                "Farm is not owned, does not exist, or no current device location was stored"
+            )
+        },
+    },
+)
+def use_current_location_for_owned_farm(
+    farm_id: UUID, user: CurrentUser, session: DatabaseSession
+) -> FarmLocationResponse:
+    """Copy existing device coordinates; the client does not resend sensitive coordinates."""
+
+    farm = get_owned_farm(session, user.id, farm_id)
+    if farm is None:
+        raise HTTPException(status_code=404, detail="Farm not found")
+    location = get_current_location(session, user.id)
+    if location is None:
+        raise HTTPException(status_code=404, detail="Current location not found")
+    copy_current_location_to_farm(farm, location)
+    session.commit()
+    session.refresh(farm)
+    return _farm_location_response(farm)
+
+
+@router.get(
+    "/{farm_id}/location",
+    response_model=FarmLocationResponse,
+    summary="Read an owned farm's permanent location",
+    responses={
+        401: {"description": "Missing, invalid, or expired bearer token"},
+        404: {"description": "Farm not found or not owned by the authenticated user"},
+    },
+)
+def read_owned_farm_location(
+    farm_id: UUID, user: CurrentUser, session: DatabaseSession
+) -> FarmLocationResponse:
+    farm = get_owned_farm(session, user.id, farm_id)
+    if farm is None:
+        raise HTTPException(status_code=404, detail="Farm not found")
+    return _farm_location_response(farm)
 
 
 @router.get("/{farm_id}", response_model=FarmResponse)

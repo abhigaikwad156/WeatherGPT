@@ -1,5 +1,9 @@
 import { NavLink, Outlet } from "react-router-dom";
 
+import { useCurrentLocation } from "../location/LocationContext";
+import { locationDisplayName } from "../location/locationDisplay";
+import { LocationConsent } from "./LocationConsent";
+
 const navigation = [
   ["/dashboard", "Dashboard", "⌂"],
   ["/farm", "My farm", "⌖"],
@@ -12,6 +16,8 @@ const navigation = [
 ];
 
 export function AppShell() {
+  const { currentLocation, loadingSavedLocation } = useCurrentLocation();
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -27,7 +33,13 @@ export function AppShell() {
         </nav>
         <div className="sidebar-help"><span className="help-icon">?</span><div><strong>Need help?</strong><p>Ask WeatherGPT in Marathi, Hindi, or English.</p></div></div>
       </aside>
-      <main className="main-content"><header className="topbar"><div className="location"><span>⌖</span><div><small>FARM LOCATION</small><strong>Green Valley Farm, Pune</strong></div></div><div className="topbar-actions"><button className="icon-button" aria-label="Notifications">♢<span className="notification-dot" /></button><NavLink to="/settings" className="topbar-user"><span className="avatar avatar-small">RK</span><span>Ramesh</span><b>⌄</b></NavLink></div></header><Outlet /></main>
+      <main className="main-content">
+        <header className="topbar">
+          <div className="location"><span>⌖</span><div><small>CURRENT LOCATION</small><strong>{loadingSavedLocation ? "Checking saved location…" : locationDisplayName(currentLocation)}</strong></div></div>
+          <div className="topbar-actions"><details className="location-menu"><summary>Update location</summary><LocationConsent /></details><button className="icon-button" aria-label="Notifications">♢<span className="notification-dot" /></button><NavLink to="/settings" className="topbar-user"><span className="avatar avatar-small">RK</span><span>Ramesh</span><b>⌄</b></NavLink></div>
+        </header>
+        <Outlet />
+      </main>
       <nav className="mobile-nav" aria-label="Mobile navigation">
         {navigation.slice(0, 5).map(([to, label, icon]) => <NavLink key={to} to={to}><span>{icon}</span><small>{label}</small></NavLink>)}
       </nav>

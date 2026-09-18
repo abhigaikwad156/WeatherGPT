@@ -1,5 +1,13 @@
 import { request } from "./client";
-import type { ChatResponse, Crop, DashboardData, Farm, FarmWeather } from "./types";
+import type {
+  ChatResponse,
+  Crop,
+  CurrentLocation,
+  DashboardData,
+  Farm,
+  FarmLocation,
+  FarmWeather
+} from "./types";
 
 export interface AuthTokenResponse {
   access_token: string;
@@ -15,6 +23,28 @@ export interface AuthTokenResponse {
 export const weatherGptApi = {
   getDashboard: () => request<DashboardData>("/dashboard"),
   getFarms: () => request<Farm[]>("/farms"),
+  getCurrentLocation: () => request<CurrentLocation>("/location/current"),
+  saveCurrentLocation: (payload: { latitude: number; longitude: number; accuracy_meters?: number }) =>
+    request<CurrentLocation>("/location/current", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  getFarmLocation: (farmId: string) => request<FarmLocation>(`/farms/${farmId}/location`),
+  updateFarmLocation: (
+    farmId: string,
+    payload: {
+      latitude: number;
+      longitude: number;
+      accuracy_meters?: number;
+      location_name?: string;
+    }
+  ) =>
+    request<FarmLocation>(`/farms/${farmId}/location`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  useCurrentLocationForFarm: (farmId: string) =>
+    request<FarmLocation>(`/farms/${farmId}/location/from-current`, { method: "POST" }),
   getFarmWeather: (farmId: string) => request<FarmWeather>(`/farms/${farmId}/weather?refresh=true`),
   getFarmCrops: (farmId: string) => request<Crop[]>(`/farms/${farmId}/crops`),
   createCrop: (farmId: string, payload: { name: string; variety?: string; sowing_date?: string; growth_stage?: string }) =>
