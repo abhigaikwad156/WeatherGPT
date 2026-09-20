@@ -6,8 +6,29 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_current_user, get_db_session
+from app.api.v1.routes.locations import get_reverse_geocoder
 from app.domain.models import Farm, User, UserCurrentLocation
+from app.location.reverse_geocoding import ReverseGeocodedLocation
 from app.main import create_app
+
+
+class FakeReverseGeocoder:
+    def __init__(self, result: ReverseGeocodedLocation | None = None) -> None:
+        self.result = result
+        self.calls = 0
+        self.coordinates: list[tuple[Decimal, Decimal]] = []
+
+    def reverse_geocode(
+        self,
+        latitude: Decimal,
+        longitude: Decimal,
+        language: str | None = None,
+        *,
+        request_id: str | None = None,
+    ) -> ReverseGeocodedLocation | None:
+        self.calls += 1
+        self.coordinates.append((latitude, longitude))
+        return self.result
 
 
 class LocationSession:
@@ -79,16 +100,31 @@ def make_farm(owner_id: UUID) -> Farm:
     )
 
 
-def authenticated_client(session: LocationSession) -> TestClient:
+def authenticated_client(
+    session: LocationSession, reverse_geocoder: FakeReverseGeocoder | None = None
+) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_current_user] = lambda: session.user
     app.dependency_overrides[get_db_session] = lambda: session
+    app.dependency_overrides[get_reverse_geocoder] = lambda: (
+        reverse_geocoder or FakeReverseGeocoder()
+    )
     return TestClient(app)
 
 
 def test_authenticated_user_can_store_a_current_location() -> None:
     session = LocationSession(make_user())
-    with authenticated_client(session) as client:
+    reverse_geocoder = FakeReverseGeocoder(
+        ReverseGeocodedLocation(
+            "Example City, Maharashtra",
+            "Example City",
+            "Example District",
+            "Maharashtra",
+            "India",
+            "IN",
+        )
+    )
+    with authenticated_client(session, reverse_geocoder) as client:
         response = client.post(
             "/api/v1/location/current",
             json={"latitude": 17.0, "longitude": 74.0, "accuracy_meters": 25.0},
@@ -97,16 +133,49 @@ def test_authenticated_user_can_store_a_current_location() -> None:
     assert response.status_code == 200
     assert response.json()["latitude"] == "17.0"
     assert response.json()["accuracy_meters"] == "25.0"
+    assert response.json()["location_name"] == "Example City, Maharashtra"
+    assert response.json()["city"] == "Example City"
     assert session.current_location is not None
     assert session.current_location.user_id == session.user.id
     assert session.commits == 1
+    assert reverse_geocoder.coordinates == [(Decimal("17.0"), Decimal("74.0"))]
+
+
+def test_unchanged_current_coordinates_reuse_cached_location_name() -> None:
+    session = LocationSession(make_user())
+    reverse_geocoder = FakeReverseGeocoder(
+        ReverseGeocodedLocation(
+            "Example City, Maharashtra", "Example City", None, "Maharashtra", None, None
+        )
+    )
+    with authenticated_client(session, reverse_geocoder) as client:
+        first = client.post("/api/v1/location/current", json={"latitude": 17.0, "longitude": 74.0})
+        second = client.post("/api/v1/location/current", json={"latitude": 17.0, "longitude": 74.0})
+
+    assert first.status_code == second.status_code == 200
+    assert reverse_geocoder.calls == 1
+
+
+def test_reverse_geocoding_failure_keeps_current_coordinates() -> None:
+    session = LocationSession(make_user())
+    with authenticated_client(session, FakeReverseGeocoder()) as client:
+        response = client.post(
+            "/api/v1/location/current", json={"latitude": 17.0, "longitude": 74.0}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["location_name"] is None
+    assert session.current_location is not None
+    assert session.current_location.latitude == Decimal("17.0")
 
 
 @pytest.mark.parametrize(
     ("payload", "field"),
     [
         ({"latitude": 90.1, "longitude": 74.0}, "latitude"),
+        ({"latitude": -90.1, "longitude": 74.0}, "latitude"),
         ({"latitude": 17.0, "longitude": 180.1}, "longitude"),
+        ({"latitude": 17.0, "longitude": -180.1}, "longitude"),
         ({"latitude": 17.0, "longitude": 74.0, "accuracy_meters": 0}, "accuracy_meters"),
     ],
 )
@@ -140,6 +209,7 @@ def test_authenticated_user_can_retrieve_current_location() -> None:
         latitude=Decimal("17.000000"),
         longitude=Decimal("74.000000"),
         accuracy_meters=Decimal("25.00"),
+        location_name="Example City, Maharashtra",
         created_at=now,
         updated_at=now,
     )
@@ -151,6 +221,7 @@ def test_authenticated_user_can_retrieve_current_location() -> None:
     assert response.status_code == 200
     assert response.json()["longitude"] == "74.000000"
     assert response.json()["updated_at"]
+    assert response.json()["location_name"] == "Example City, Maharashtra"
 
 
 def test_farmer_can_create_or_update_a_farm_location() -> None:
@@ -212,6 +283,7 @@ def test_farmer_can_copy_current_location_to_an_owned_farm() -> None:
         latitude=Decimal("17.000000"),
         longitude=Decimal("74.000000"),
         accuracy_meters=Decimal("25.00"),
+        location_name="Example City, Maharashtra",
         created_at=now,
         updated_at=now,
     )
@@ -223,7 +295,7 @@ def test_farmer_can_copy_current_location_to_an_owned_farm() -> None:
     assert response.status_code == 200
     assert response.json()["latitude"] == "17.000000"
     assert response.json()["accuracy_meters"] == "25.00"
-    assert farm.location_name is None
+    assert farm.location_name == "Example City, Maharashtra"
 
 
 def test_using_current_location_fails_when_no_location_has_been_submitted() -> None:

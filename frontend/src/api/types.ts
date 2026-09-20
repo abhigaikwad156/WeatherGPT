@@ -56,7 +56,12 @@ export interface CurrentLocation {
   longitude: number | string;
   accuracy_meters: number | string | null;
   updated_at: string;
-  location_name?: string | null;
+  location_name: string | null;
+  city: string | null;
+  district: string | null;
+  state: string | null;
+  country: string | null;
+  country_code: string | null;
 }
 
 export interface FarmLocation {

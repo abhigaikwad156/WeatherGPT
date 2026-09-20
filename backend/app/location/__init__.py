@@ -1,0 +1,1 @@
+"""Location-specific provider adapters."""

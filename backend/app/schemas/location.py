@@ -24,6 +24,12 @@ class CurrentLocationResponse(BaseModel):
     latitude: Decimal
     longitude: Decimal
     accuracy_meters: Decimal | None
+    location_name: str | None
+    city: str | None
+    district: str | None
+    state: str | None
+    country: str | None
+    country_code: str | None
     updated_at: datetime
 
 

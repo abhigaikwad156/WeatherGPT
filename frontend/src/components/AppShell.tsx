@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 
+import { weatherGptApi } from "../api/weatherGpt";
+import { useResource } from "../hooks/useResource";
 import { useCurrentLocation } from "../location/LocationContext";
 import { locationDisplayName } from "../location/locationDisplay";
 import { LocationConsent } from "./LocationConsent";
@@ -17,12 +19,21 @@ const navigation = [
 
 export function AppShell() {
   const { currentLocation, loadingSavedLocation } = useCurrentLocation();
+  const profile = useResource(weatherGptApi.getProfile);
+  const displayName = profile.data?.display_name ?? "Your account";
+  const firstName = profile.data?.display_name.split(" ")[0] ?? "Account";
+  const initials = profile.data?.display_name
+    .split(" ")
+    .map((name) => name[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() ?? "?";
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <NavLink to="/dashboard" className="brand"><span className="brand-mark">☼</span><span><strong>Weather</strong><small>GPT</small></span></NavLink>
-        <div className="sidebar-profile"><span className="avatar">RK</span><div><strong>Ramesh Kumar</strong><small>Green Valley Farm</small></div></div>
+        <div className="sidebar-profile"><span className="avatar">{initials}</span><div><strong>{displayName}</strong><small>Green Valley Farm</small></div></div>
         <p className="sidebar-label">Your farm</p>
         <nav aria-label="Primary navigation">
           {navigation.map(([to, label, icon]) => (
@@ -36,7 +47,7 @@ export function AppShell() {
       <main className="main-content">
         <header className="topbar">
           <div className="location"><span>⌖</span><div><small>CURRENT LOCATION</small><strong>{loadingSavedLocation ? "Checking saved location…" : locationDisplayName(currentLocation)}</strong></div></div>
-          <div className="topbar-actions"><details className="location-menu"><summary>Update location</summary><LocationConsent /></details><button className="icon-button" aria-label="Notifications">♢<span className="notification-dot" /></button><NavLink to="/settings" className="topbar-user"><span className="avatar avatar-small">RK</span><span>Ramesh</span><b>⌄</b></NavLink></div>
+          <div className="topbar-actions"><details className="location-menu"><summary>Update location</summary><LocationConsent /><small className="osm-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></small></details><button className="icon-button" aria-label="Notifications">♢<span className="notification-dot" /></button><NavLink to="/settings" className="topbar-user"><span className="avatar avatar-small">{initials}</span><span>{firstName}</span><b>⌄</b></NavLink></div>
         </header>
         <Outlet />
       </main>

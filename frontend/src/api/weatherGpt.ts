@@ -24,10 +24,14 @@ export const weatherGptApi = {
   getDashboard: () => request<DashboardData>("/dashboard"),
   getFarms: () => request<Farm[]>("/farms"),
   getCurrentLocation: () => request<CurrentLocation>("/location/current"),
-  saveCurrentLocation: (payload: { latitude: number; longitude: number; accuracy_meters?: number }) =>
+  saveCurrentLocation: (
+    payload: { latitude: number; longitude: number; accuracy_meters?: number },
+    requestId?: string
+  ) =>
     request<CurrentLocation>("/location/current", {
       method: "POST",
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      headers: requestId ? { "X-Request-ID": requestId } : undefined
     }),
   getFarmLocation: (farmId: string) => request<FarmLocation>(`/farms/${farmId}/location`),
   updateFarmLocation: (
@@ -62,7 +66,7 @@ export const weatherGptApi = {
   getWeather: () => request<unknown>("/weather"),
   getRecommendations: () => request<unknown>("/recommendations"),
   getAlerts: () => request<unknown>("/weather-alerts"),
-  getProfile: () => request<unknown>("/users/me"),
+  getProfile: () => request<AuthTokenResponse["user"]>("/users/me"),
   login: (payload: { email: string; password: string }) =>
     request<AuthTokenResponse>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   register: (payload: { display_name: string; email: string; password: string }) =>

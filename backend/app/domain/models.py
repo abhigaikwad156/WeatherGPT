@@ -116,6 +116,12 @@ class UserCurrentLocation(TimestampMixin, Base):
     latitude: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False)
     longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
     accuracy_meters: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    location_name: Mapped[str | None] = mapped_column(String(160))
+    city: Mapped[str | None] = mapped_column(String(120))
+    district: Mapped[str | None] = mapped_column(String(120))
+    state: Mapped[str | None] = mapped_column(String(120))
+    country: Mapped[str | None] = mapped_column(String(120))
+    country_code: Mapped[str | None] = mapped_column(String(2))
 
     user: Mapped[User] = relationship(back_populates="current_device_location")
 

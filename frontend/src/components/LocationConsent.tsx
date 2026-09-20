@@ -13,7 +13,7 @@ const errorMessages: Record<LocationErrorKind, string> = {
 
 export function LocationConsent({ onDetected }: { onDetected?: () => void }) {
   const [explaining, setExplaining] = useState(false);
-  const { clearLocationError, currentLocation, detectAndSaveCurrentLocation, errorKind, locationLoading } =
+  const { clearLocationError, currentLocation, detectAndSaveCurrentLocation, errorKind, locationLoading, locationPhase } =
     useCurrentLocation();
 
   async function allowLocation() {
@@ -27,7 +27,7 @@ export function LocationConsent({ onDetected }: { onDetected?: () => void }) {
 
   return <div className="location-consent" aria-live="polite">
     <p>WeatherGPT uses your location to provide local weather and agricultural advisories.</p>
-    {errorKind ? <><p className="form-error" role="alert">{errorMessages[errorKind]}</p><div className="location-actions"><button type="button" className="primary-button" onClick={allowLocation} disabled={locationLoading}>{locationLoading ? "Detecting your location…" : "Try again"}</button><button type="button" className="secondary-button" onClick={() => { clearLocationError(); setExplaining(false); }}>Choose location manually</button></div></> : <div className="location-actions"><button type="button" className="primary-button" onClick={allowLocation} disabled={locationLoading}>{locationLoading ? "Detecting your location…" : "Allow location"}</button><button type="button" className="secondary-button" onClick={() => setExplaining(false)} disabled={locationLoading}>Not now</button></div>}
+    {errorKind ? <><p className="form-error" role="alert">{errorMessages[errorKind]}</p><div className="location-actions"><button type="button" className="primary-button" onClick={allowLocation} disabled={locationLoading}>{locationPhase === "saving" ? "Saving location…" : locationLoading ? "Getting your location…" : "Try again"}</button><button type="button" className="secondary-button" onClick={() => { clearLocationError(); setExplaining(false); }}>Choose location manually</button></div></> : <div className="location-actions"><button type="button" className="primary-button" onClick={allowLocation} disabled={locationLoading}>{locationPhase === "saving" ? "Saving location…" : locationLoading ? "Getting your location…" : "Allow location"}</button><button type="button" className="secondary-button" onClick={() => setExplaining(false)} disabled={locationLoading}>Not now</button></div>}
     {currentLocation && !locationLoading && !errorKind && <p className="location-success">Location detected · 📍 {locationDisplayName(currentLocation)}</p>}
   </div>;
 }

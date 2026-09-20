@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     app_name: str = "WeatherGPT API"
     app_env: str = Field(default="development", pattern="^(development|test|staging|production)$")
     debug: bool = False
+    location_debug: bool = False
     api_v1_prefix: str = "/api/v1"
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     jwt_secret_key: str = Field(min_length=32)
@@ -36,6 +37,9 @@ class Settings(BaseSettings):
     weather_api_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
     weather_api_retries: int = Field(default=2, ge=0, le=5)
     weather_cache_ttl_seconds: int = Field(default=300, gt=0, le=86_400)
+    nominatim_base_url: str = "https://nominatim.openstreetmap.org"
+    nominatim_user_agent: str = Field(default="WeatherGPT/1.0", min_length=1)
+    nominatim_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.6-flash"
 

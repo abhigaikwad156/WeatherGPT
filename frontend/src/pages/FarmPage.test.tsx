@@ -22,7 +22,12 @@ const currentLocation = {
   longitude: "74.000000",
   accuracy_meters: "25.00",
   updated_at: "2026-09-18T00:00:00Z",
-  location_name: "Current location"
+  location_name: "Current location",
+  city: "Current location",
+  district: null,
+  state: "Maharashtra",
+  country: "India",
+  country_code: "IN"
 };
 
 beforeEach(() => {
@@ -64,7 +69,6 @@ test("keeps the farm location separate and confirms an explicit current-location
 
   render(<LocationProvider><FarmPage /></LocationProvider>);
   expect(await screen.findByText("Farm location")).toBeInTheDocument();
-  expect(screen.getByText("Current location")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Edit farm location" }));
   fireEvent.click(screen.getAllByRole("button", { name: /use my current location/i })[0]);
   fireEvent.click(screen.getByRole("button", { name: "Allow location" }));

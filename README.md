@@ -28,6 +28,24 @@ Farm and crop resources are always scoped to the authenticated user. Requests fo
 resource return `404` rather than exposing whether the resource exists. Apply the
 `20260910_0003` Alembic migration before using the new profile fields.
 
+## Current-location names
+
+`POST /api/v1/location/current` stores an authenticated user's explicitly submitted browser GPS
+coordinates and then performs best-effort, server-side reverse geocoding through
+[OpenStreetMap Nominatim](https://nominatim.org/release-docs/develop/api/Reverse/). The response
+and subsequent `GET /api/v1/location/current` include a normalized `location_name` and available
+city, district, state, and country fields. If Nominatim is unavailable, coordinates are still
+saved and `location_name` remains `null`; the UI displays “Location saved” rather than inventing
+a place name.
+
+Set `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT`, and `NOMINATIM_TIMEOUT_SECONDS` in deployment
+configuration. `NOMINATIM_USER_AGENT` must identify the deployment and should include a monitored
+contact channel before production use. A successful result is retained with the latest exact
+coordinates, so resubmitting unchanged coordinates does not make another request. The backend spaces provider
+requests by at least one second per process in line with the
+[Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/). The frontend
+shows © OpenStreetMap contributors attribution where the location action is available.
+
 ## Conversational weather API
 
 `POST /api/v1/conversations/messages` accepts an authenticated request:
