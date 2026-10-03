@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Keep local `uvicorn` runs (started from `backend/`) aligned with Docker,
@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     nominatim_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.6-flash"
+    rag_embedding_model: str = "gemini-embedding-001"
+    rag_embedding_dimension: int = Field(default=1536, ge=1)
+    rag_minimum_score: float = Field(default=0.0, ge=-1.0, le=1.0)
+    rag_trusted_publishers: list[str] = Field(default_factory=list)
+    agricultural_thresholds_path: Path | None = None
 
     @field_validator("cors_origins")
     @classmethod
@@ -51,6 +56,24 @@ class Settings(BaseSettings):
                 "CORS_ORIGINS must list explicit origins; wildcard origins are not allowed"
             )
         return origins
+
+    @field_validator("agricultural_thresholds_path", mode="before")
+    @classmethod
+    def empty_threshold_path_is_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def validate_agricultural_runtime(self) -> "Settings":
+        if self.rag_embedding_dimension != 1536:
+            raise ValueError("RAG_EMBEDDING_DIMENSION must match pgvector's fixed 1536 dimensions")
+        if self.app_env == "production":
+            if not self.gemini_api_key:
+                raise ValueError("GEMINI_API_KEY is required in production")
+            if not self.rag_trusted_publishers:
+                raise ValueError("RAG_TRUSTED_PUBLISHERS must include approved publishers")
+            if self.rag_minimum_score <= 0:
+                raise ValueError("RAG_MINIMUM_SCORE must be calibrated and greater than zero")
+        return self
 
 
 @lru_cache

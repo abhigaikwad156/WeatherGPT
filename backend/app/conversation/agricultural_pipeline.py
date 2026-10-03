@@ -216,8 +216,23 @@ class GroundedExplanation:
         if weather_details:
             explanation += f" Verified weather: {weather_details}."
         if retrieved:
-            sources = ", ".join(item.chunk.metadata.title for item in retrieved)
-            explanation += f" Verified guidance: {sources}."
+            excerpts = []
+            for item in retrieved:
+                metadata = item.chunk.metadata
+                source = "; ".join(
+                    value
+                    for value in (
+                        f"source_id={metadata.source_id}",
+                        f"title={metadata.title}",
+                        f"publisher={metadata.publisher}",
+                        f"source_uri={metadata.source_uri}" if metadata.source_uri else None,
+                    )
+                    if value
+                )
+                excerpts.append(f"[{source}] {item.chunk.text}")
+            explanation += " Verified agricultural guidance excerpts: " + " ".join(excerpts)
+        else:
+            explanation += " No verified agricultural guidance source passed retrieval filtering."
         return explanation
 
 

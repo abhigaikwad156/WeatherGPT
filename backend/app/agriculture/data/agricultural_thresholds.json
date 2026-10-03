@@ -1,20 +1,10 @@
 {
-  "irrigation_profiles": [],
-  "spray_rainfall_lookahead_mm": null,
-  "spray_min_humidity_percent": null,
-  "spray_max_humidity_percent": null,
-  "spray_max_wind_speed_kph": null,
-  "sowing_min_temperature_celsius": null,
-  "sowing_max_temperature_celsius": null,
-  "sowing_rainfall_min_mm": null,
-  "sowing_rainfall_max_mm": null,
-  "extreme_temperature_low_celsius": null,
-  "extreme_temperature_high_celsius": null,
-  "extreme_rainfall_mm": null,
-  "extreme_wind_speed_kph": null,
   "crop_profiles": {},
+  "irrigation_profiles": [],
   "source_notes": {
-    "all": "Production values must be reviewed by a qualified agronomist for the target crop, growth stage, soil, region, and farm practice. Null means the rule is not configured.",
-    "irrigation_profiles": "Irrigation has no global fallback. A matching crop-specific profile must provide reviewed soil-moisture and forecast thresholds before the engine can return APPLY or WAIT."
+    "unconfigured_irrigation_profile_1": "Original inactive record preserved: crop=sugarcane; region=Maharashtra; growth_stage=all_stages; soil_type=medium_deep_black_soil; irrigation_type=subsurface_drip; soil_moisture_sufficient_percent=60.0; soil_moisture_operator=equal_etc_replenishment; soil_moisture_measurement_basis=crop_evapotranspiration_etc; soil_moisture_sensor_depth=null; forecast_rainfall_threshold_mm=null; forecast_rainfall_horizon_hours=null; publisher=Mahatma Phule Krishi Vidyapeeth (MPKV), Rahuri; document_title=Adoption of recommendations released by MPKV Rahuri for sugarcane; publication_year=2026; source_location=Western Maharashtra; source_url=https://www.agronomyjournals.com/archives/2026/vol9issue1S/PartC/S-9-1-40-992.pdf; reviewer=PENDING AGRONOMIST REVIEW; effective_date=null",
+    "unconfigured_irrigation_profile_2": "Original inactive record preserved: crop=sugarcane; region=Scarcity Zone, Maharashtra; growth_stage=tillering_45_to_135_dap; soil_type=heavy_deep_black_soil; irrigation_type=surface_furrow; soil_moisture_sufficient_percent=100.0; soil_moisture_operator=equal_etc_replenishment; soil_moisture_measurement_basis=full_irrigation_requirement; soil_moisture_sensor_depth=null; forecast_rainfall_threshold_mm=null; forecast_rainfall_horizon_hours=null; publisher=Mahatma Phule Krishi Vidyapeeth (MPKV), Rahuri; document_title=Sugarcane irrigation recommendations for scarcity zone conditions; publication_year=2026; source_location=Scarcity Zone, Maharashtra; source_url=https://www.agronomyjournals.com/archives/2026/vol9issue1S/PartC/S-9-1-40-992.pdf; reviewer=PENDING AGRONOMIST REVIEW; effective_date=null",
+    "unconfigured_irrigation_profile_3": "Original inactive record preserved: crop=sugarcane; region=Scarcity Zone, Maharashtra; growth_stage=grand_growth_136_to_300_dap; soil_type=heavy_deep_black_soil; irrigation_type=surface_furrow; soil_moisture_sufficient_percent=70.0; soil_moisture_operator=equal_etc_replenishment; soil_moisture_measurement_basis=30_percent_water_deficit; soil_moisture_sensor_depth=null; forecast_rainfall_threshold_mm=null; forecast_rainfall_horizon_hours=null; publisher=Mahatma Phule Krishi Vidyapeeth (MPKV), Rahuri; document_title=Sugarcane irrigation recommendations for scarcity zone conditions; publication_year=2026; source_location=Scarcity Zone, Maharashtra; source_url=https://www.agronomyjournals.com/archives/2026/vol9issue1S/PartC/S-9-1-40-992.pdf; reviewer=PENDING AGRONOMIST REVIEW; effective_date=null",
+    "unconfigured_irrigation_profile_4": "Original inactive record preserved: crop=sugarcane; region=India (National); growth_stage=all_stages; soil_type=general_calibrated; irrigation_type=general; soil_moisture_sufficient_percent=30.0; soil_moisture_operator=greater_than; soil_moisture_measurement_basis=available_soil_moisture_asm; soil_moisture_sensor_depth=null; forecast_rainfall_threshold_mm=null; forecast_rainfall_horizon_hours=null; publisher=ICAR-Sugarcane Breeding Institute (ICAR-SBI), Coimbatore; document_title=Digital Soil Moisture Sensor (DSMS) Technology Profile; publication_year=2024; source_location=Coimbatore, Tamil Nadu / India; source_url=https://sugarcane.res.in/?page_id=5272; reviewer=PENDING AGRONOMIST REVIEW; effective_date=null"
   }
 }

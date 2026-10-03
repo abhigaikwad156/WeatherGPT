@@ -144,6 +144,12 @@ export interface ChatMessage {
       deterministic: boolean;
       citations: Array<Record<string, unknown>>;
     };
+    knowledgeSources?: Array<{
+      source_id?: string;
+      title?: string;
+      publisher?: string;
+      source_uri?: string | null;
+    }>;
   };
 }
 

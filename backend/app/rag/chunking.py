@@ -1,6 +1,6 @@
 """Deterministic, source-preserving text chunking."""
 
-from uuid import uuid4
+from uuid import uuid5
 
 from app.rag.types import AgriculturalDocument, DocumentChunk
 
@@ -19,7 +19,13 @@ def chunk_document(
         if current and length + len(word) + 1 > max_characters:
             text = " ".join(current)
             chunks.append(
-                DocumentChunk(document.document_id, uuid4(), text, document.metadata, ordinal)
+                DocumentChunk(
+                    document.document_id,
+                    uuid5(document.document_id, str(ordinal)),
+                    text,
+                    document.metadata,
+                    ordinal,
+                )
             )
             ordinal += 1
             tail: list[str] = []
@@ -37,7 +43,7 @@ def chunk_document(
         chunks.append(
             DocumentChunk(
                 document.document_id,
-                uuid4(),
+                uuid5(document.document_id, str(ordinal)),
                 " ".join(current),
                 document.metadata,
                 ordinal,

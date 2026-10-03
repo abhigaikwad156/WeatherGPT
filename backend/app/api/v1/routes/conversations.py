@@ -12,7 +12,11 @@ from app.schemas.conversation import (
     ConversationResponse,
     WeatherMetadata,
 )
-from app.services.conversations import ConversationNotFoundError, handle_message
+from app.services.conversations import (
+    AgriculturalKnowledgeResult,
+    ConversationNotFoundError,
+    handle_message,
+)
 
 router = APIRouter(prefix="/conversations")
 
@@ -32,6 +36,8 @@ def send_message(
     session.commit()
     session.refresh(message)
     agricultural_result = result if isinstance(result, AgriculturalPipelineResult) else None
+    knowledge_result = result if isinstance(result, AgriculturalKnowledgeResult) else None
+    weather_result = result if not agricultural_result and not knowledge_result else None
     agricultural = None
     if agricultural_result is not None:
         agricultural = AgriculturalMetadata(
@@ -48,23 +54,30 @@ def send_message(
         farm_id=(
             agricultural_result.farmer.farm_id
             if agricultural_result
-            else result.farm_id
-            if result
+            else weather_result.farm_id
+            if weather_result
             else None
         ),
         farm_name=(
             agricultural_result.farmer.farm_name
             if agricultural_result
-            else result.farm_name
-            if result
+            else weather_result.farm_name
+            if weather_result
             else None
         ),
-        current=result.current if result and not agricultural else None,
-        forecast=result.forecast if result and not agricultural else None,
-        rainfall_mm=result.rainfall_mm if result and not agricultural else None,
-        alerts=result.alerts if result and not agricultural else None,
-        source=result.source if result and not agricultural else None,
+        current=weather_result.current if weather_result else None,
+        forecast=weather_result.forecast if weather_result else None,
+        rainfall_mm=weather_result.rainfall_mm if weather_result else None,
+        alerts=weather_result.alerts if weather_result else None,
+        source=weather_result.source if weather_result else None,
         agricultural=agricultural,
+        knowledge_sources=(
+            agricultural_result.citations
+            if agricultural_result
+            else knowledge_result.citations
+            if knowledge_result
+            else []
+        ),
     )
     return ConversationResponse(
         conversation_id=conversation.id,

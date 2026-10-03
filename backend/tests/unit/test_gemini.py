@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -9,7 +11,17 @@ def test_gemini_response_uses_key_and_returns_generated_text() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["x-goog-api-key"] == "test-key"
         assert request.url.path.endswith("/models/gemini-3.6-flash:generateContent")
-        generation_config = request.json()["generationConfig"]
+        prompt = json.loads(request.content)
+        assert "You may answer general educational questions" in (
+            prompt["system_instruction"]["parts"][0]["text"]
+        )
+        assert "Use retrieved excerpts as evidence for specific agricultural recommendations" in (
+            prompt["system_instruction"]["parts"][0]["text"]
+        )
+        assert "do not state crop-specific stage durations" in (
+            prompt["system_instruction"]["parts"][0]["text"]
+        )
+        generation_config = json.loads(request.content)["generationConfig"]
         assert generation_config["maxOutputTokens"] == 2048
         assert generation_config["thinkingConfig"] == {"thinkingLevel": "low"}
         return httpx.Response(
@@ -60,7 +72,7 @@ def test_gemini_retries_an_incomplete_response_with_a_larger_token_budget() -> N
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
-        max_output_tokens = request.json()["generationConfig"]["maxOutputTokens"]
+        max_output_tokens = json.loads(request.content)["generationConfig"]["maxOutputTokens"]
         if calls == 1:
             assert max_output_tokens == 2048
             return httpx.Response(
@@ -92,5 +104,7 @@ def test_gemini_retries_an_incomplete_response_with_a_larger_token_budget() -> N
         httpx.Client(transport=httpx.MockTransport(handler)),
     )
 
-    assert service.respond("Explain irrigation", "en", "No live weather data.") == "Complete answer."
+    assert service.respond("Explain irrigation", "en", "No live weather data.") == (
+        "Complete answer."
+    )
     assert calls == 2

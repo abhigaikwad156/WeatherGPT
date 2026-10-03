@@ -32,6 +32,14 @@ irrigation practice, and sensor contract.
 An unset value disables that rule. The engine returns `NEEDS_INPUT` rather than silently
 falling back to a guessed threshold. Tests inject explicit fixture-only
 `AgriculturalThresholds` objects so rule behavior is reproducible and reviewable.
+To deploy reviewed values separately from the packaged defaults, set
+`AGRICULTURAL_THRESHOLDS_PATH` to a UTF-8 JSON file. Each enabled top-level threshold must
+have a matching `source_notes` entry named after its JSON field; each enabled crop profile
+requires `source_notes.crop_profiles.<crop>`. Invalid ranges and untraced values fail at
+load time. An irrigation profile additionally requires publisher, document title, reviewer,
+measurement basis and sensor depth when a soil-moisture threshold is enabled, and a positive
+forecast horizon when a rainfall threshold is enabled. No agronomic values are supplied by
+the application; they must be reviewed for the deployment's actual conditions.
 
 ## Rules
 

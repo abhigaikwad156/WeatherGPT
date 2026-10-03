@@ -5,6 +5,7 @@ crop, soil, climate, and farm practice before being used in production.
 """
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -91,7 +92,11 @@ class IrrigationProfile:
         )
 
     def is_reviewed(self) -> bool:
-        return bool(self.source.reviewed_by) and (
+        return bool(
+            self.source.publisher
+            and self.source.document_title
+            and self.source.reviewed_by
+        ) and (
             self.source.effective_from is None or self.source.effective_from <= date.today()
         )
 
@@ -137,7 +142,125 @@ class AgriculturalThresholds:
 
     @classmethod
     def from_json(cls, path: Path) -> "AgriculturalThresholds":
-        return cls.from_mapping(json.loads(path.read_text(encoding="utf-8")))
+        thresholds = cls.from_mapping(json.loads(path.read_text(encoding="utf-8")))
+        thresholds.validate_configured_sources()
+        return thresholds
+
+    def validate_configured_sources(self) -> None:
+        """Reject enabled rule values without traceable review notes or valid ranges."""
+        notes = self.source_notes or {}
+        scalar_fields = (
+            "spray_rainfall_lookahead_mm",
+            "spray_min_humidity_percent",
+            "spray_max_humidity_percent",
+            "spray_max_wind_speed_kph",
+            "sowing_min_temperature_celsius",
+            "sowing_max_temperature_celsius",
+            "sowing_rainfall_min_mm",
+            "sowing_rainfall_max_mm",
+            "extreme_temperature_low_celsius",
+            "extreme_temperature_high_celsius",
+            "extreme_rainfall_mm",
+            "extreme_wind_speed_kph",
+        )
+        for field_name in scalar_fields:
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            if not math.isfinite(value):
+                raise ValueError(f"{field_name} must be finite")
+            if not notes.get(field_name, "").strip():
+                raise ValueError(f"source_notes.{field_name} is required for an enabled rule")
+            if field_name.endswith("humidity_percent") and not 0 <= value <= 100:
+                raise ValueError(f"{field_name} must be between 0 and 100")
+            if any(unit in field_name for unit in ("rainfall", "wind_speed")) and value < 0:
+                raise ValueError(f"{field_name} cannot be negative")
+
+        self._validate_ordered_range(
+            self.spray_min_humidity_percent,
+            self.spray_max_humidity_percent,
+            "spray humidity",
+        )
+        self._validate_ordered_range(
+            self.sowing_min_temperature_celsius,
+            self.sowing_max_temperature_celsius,
+            "sowing temperature",
+        )
+        self._validate_ordered_range(
+            self.sowing_rainfall_min_mm,
+            self.sowing_rainfall_max_mm,
+            "sowing rainfall",
+        )
+        self._validate_ordered_range(
+            self.extreme_temperature_low_celsius,
+            self.extreme_temperature_high_celsius,
+            "extreme temperature",
+        )
+
+        for crop, profile in (self.crop_profiles or {}).items():
+            values = tuple(value for value in profile.__dict__.values() if value is not None)
+            if not values:
+                continue
+            note_key = f"crop_profiles.{crop}"
+            if not notes.get(note_key, "").strip():
+                raise ValueError(f"source_notes.{note_key} is required for an enabled profile")
+            if any(not math.isfinite(value) for value in values):
+                raise ValueError(f"crop profile {crop!r} values must be finite")
+            for field_name in (
+                "minimum_humidity_percent",
+                "maximum_humidity_percent",
+            ):
+                value = getattr(profile, field_name)
+                if value is not None and not 0 <= value <= 100:
+                    raise ValueError(
+                        f"crop profile {crop!r} {field_name} must be between 0 and 100"
+                    )
+            self._validate_ordered_range(
+                profile.minimum_temperature_celsius,
+                profile.maximum_temperature_celsius,
+                f"crop profile {crop} temperature",
+            )
+            self._validate_ordered_range(
+                profile.minimum_humidity_percent,
+                profile.maximum_humidity_percent,
+                f"crop profile {crop} humidity",
+            )
+
+        for profile in self.irrigation_profiles:
+            if not profile.is_reviewed():
+                raise ValueError(
+                    f"irrigation profile for {profile.crop!r} requires publisher, "
+                    "document title, reviewer, and an eligible effective date"
+                )
+            moisture = profile.soil_moisture
+            if moisture.sufficient_percent is not None:
+                if not 0 <= moisture.sufficient_percent <= 100:
+                    raise ValueError("irrigation soil-moisture threshold must be between 0 and 100")
+                if not moisture.measurement_basis or not moisture.sensor_depth_cm:
+                    raise ValueError(
+                        "configured irrigation soil-moisture threshold requires measurement basis "
+                        "and sensor depth"
+                    )
+                if not math.isfinite(moisture.sensor_depth_cm) or moisture.sensor_depth_cm <= 0:
+                    raise ValueError("irrigation sensor depth must be positive and finite")
+            forecast = profile.forecast
+            if forecast.rainfall_lookahead_mm is not None:
+                if (
+                    not math.isfinite(forecast.rainfall_lookahead_mm)
+                    or forecast.rainfall_lookahead_mm < 0
+                ):
+                    raise ValueError("irrigation forecast rainfall threshold must be non-negative")
+                if forecast.horizon_days is None or forecast.horizon_days <= 0:
+                    raise ValueError(
+                        "configured irrigation forecast threshold requires a positive horizon"
+                    )
+
+    @staticmethod
+    def _validate_ordered_range(
+        minimum: float | None, maximum: float | None, label: str
+    ) -> None:
+        if minimum is not None and maximum is not None and minimum > maximum:
+            raise ValueError(f"{label} minimum cannot exceed maximum")
 
 
 DEFAULT_THRESHOLDS_PATH = Path(__file__).with_name("data") / "agricultural_thresholds.json"

@@ -41,6 +41,9 @@ class WeatherMetadata(BaseModel):
     alerts: list[dict[str, object]] | None = None
     source: str | None = None
     agricultural: AgriculturalMetadata | None = None
+    knowledge_sources: list[dict[str, object]] = Field(
+        default_factory=list, serialization_alias="knowledgeSources"
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 

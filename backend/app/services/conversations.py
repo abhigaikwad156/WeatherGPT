@@ -1,11 +1,14 @@
 """Conversational orchestration service."""
 
+import json
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agriculture.engine import AgriculturalDecisionEngine
+from app.agriculture.thresholds import AgriculturalThresholds, load_default_thresholds
 from app.conversation.agricultural_pipeline import AgriculturalChatPipeline
 from app.conversation.agricultural_tools import (
     DatabaseFarmerContextTool,
@@ -17,7 +20,7 @@ from app.conversation.intents import WeatherIntent, detect_intent
 from app.conversation.weather_tool import WeatherResult, WeatherTool
 from app.core.config import get_settings
 from app.domain.models import Conversation, Message, MessageRole
-from app.rag.embeddings import HashEmbeddingProvider
+from app.rag.embeddings import GeminiEmbeddingProvider
 from app.rag.postgres import PgVectorChunkRepository
 from app.rag.retrieval import RetrievalService
 from app.schemas.conversation import ConversationMessageRequest
@@ -25,6 +28,13 @@ from app.schemas.conversation import ConversationMessageRequest
 
 class ConversationNotFoundError(Exception):
     """Raised when a conversation is not owned by the requesting user."""
+
+
+@dataclass(frozen=True)
+class AgriculturalKnowledgeResult:
+    """Source metadata for agricultural answers that do not produce a rule decision."""
+
+    citations: list[dict[str, object]]
 
 
 def handle_message(
@@ -58,14 +68,19 @@ def handle_message(
     session.flush()
 
     agricultural_result = None
-    agricultural_question = _is_agricultural_question(request.content)
+    knowledge_result = None
+    retrieval_service = None
+    agricultural_question = (
+        intent == WeatherIntent.UNKNOWN or _is_agricultural_question(request.content)
+    )
     if agricultural_question:
         try:
+            retrieval_service = _retrieval_service(session)
             agricultural_result = AgriculturalChatPipeline(
                 DatabaseFarmerContextTool(session),
                 DatabaseWeatherContextTool(session),
-                AgriculturalDecisionEngine(),
-                _retrieval_service(session),
+                AgriculturalDecisionEngine(_load_thresholds()),
+                retrieval_service,
             ).answer(
                 user_id,
                 request.content,
@@ -74,6 +89,14 @@ def handle_message(
             )
         except ValueError:
             agricultural_result = None
+    if agricultural_question and agricultural_result is None:
+        if retrieval_service is None:
+            retrieval_service = _retrieval_service(session)
+        retrieved = retrieval_service.retrieve(request.content)
+        sources = RetrievalService.context(retrieved)
+        knowledge_result = AgriculturalKnowledgeResult(
+            citations=[item["source"] for item in sources]
+        )
     result = (
         None
         if agricultural_result is not None
@@ -82,6 +105,8 @@ def handle_message(
     fallback_explanation = (
         agricultural_result.explanation
         if agricultural_result is not None
+        else _knowledge_context(request.content, sources, result, request.language)
+        if knowledge_result is not None
         else _agricultural_help() if agricultural_question and result is None
         else WeatherExplanationService().explain(result, request.language)
     )
@@ -97,7 +122,12 @@ def handle_message(
     )
     session.add(assistant_message)
     session.flush()
-    return conversation, assistant_message, intent, agricultural_result or result
+    return (
+        conversation,
+        assistant_message,
+        intent,
+        agricultural_result or knowledge_result or result,
+    )
 
 
 def _is_agricultural_question(content: str) -> bool:
@@ -109,46 +139,51 @@ def _is_agricultural_question(content: str) -> bool:
             "water",
             "spray",
             "pesticide",
-            "sow",
-            "plant",
-            "seed",
-            "crop",
-            "farm",
-            "field",
-            "growing",
+            "fertil",
             "disease",
             "pest",
-            "fertil",
-            "harvest",
-            "yield",
-            "risk",
-            "suitable",
-            "compatible",
-            "पीक",
-            "शेत",
-            "फसल",
-            "खेती",
-            "soybean",
-            "फवार",
-            "पाणी",
+            "farm",
+            "field",
+            "crop",
+            "soil",
+            "sugarcane",
+            "sugar cane",
+            "rainfall",
+            "heavy rain",
+            "कृषि",
+            "गन्ना",
+            "ऊस",
+            "कांदा",
+            "माती",
+            "मृदा",
+            "खत",
+            "रोग",
+            "कीड",
+            "पाऊस",
             "सिंचन",
-            "सिंचाई",
-            "पानी",
-            "स्प्रे",
-            "छिड़काव",
-            "कीटनाशक",
-            "पेर",
-            "लाव",
-            "बोना",
-            "बुवाई",
         )
     )
 
 
 def _retrieval_service(session: Session) -> RetrievalService:
     """Build the pgvector-backed RAG service with the migration's 1536 dimensions."""
+    settings = get_settings()
     repository = PgVectorChunkRepository(session.get_bind())
-    return RetrievalService(repository, HashEmbeddingProvider(1536))
+    embeddings = (
+        GeminiEmbeddingProvider(
+            settings.gemini_api_key,
+            settings.rag_embedding_model,
+            settings.rag_embedding_dimension,
+        )
+        if settings.gemini_api_key
+        else None
+    )
+    return RetrievalService(repository, embeddings, settings.rag_minimum_score)
+
+
+def _load_thresholds() -> AgriculturalThresholds:
+    path = get_settings().agricultural_thresholds_path
+    return AgriculturalThresholds.from_json(path) if path else load_default_thresholds()
 
 
 def _agricultural_help() -> str:
@@ -156,3 +191,22 @@ def _agricultural_help() -> str:
         "I can help with irrigation, spraying, sowing, and weather risk. "
         "Try a specific question such as 'Should I irrigate today?' or 'Is it safe to spray?'"
     )
+
+
+def _knowledge_context(
+    question: str,
+    sources: list[dict[str, object]],
+    weather_result: WeatherResult | None,
+    language: str,
+) -> str:
+    sections = [f"Agricultural question: {question}"]
+    if sources:
+        sections.append(
+            "Retrieved agricultural source excerpts (cite the title and publisher):\n"
+            + json.dumps(sources, ensure_ascii=False)
+        )
+    else:
+        sections.append("No verified agricultural source excerpts matched this question.")
+    if weather_result is not None:
+        sections.append(WeatherExplanationService().explain(weather_result, language))
+    return "\n\n".join(sections)

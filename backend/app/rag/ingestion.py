@@ -1,6 +1,7 @@
 """Trusted agricultural document ingestion pipeline."""
 
 from collections.abc import Iterable
+from uuid import NAMESPACE_URL, uuid5
 
 from app.rag.chunking import chunk_document
 from app.rag.embeddings import EmbeddingProvider
@@ -33,7 +34,21 @@ class DocumentIngestionService:
             raise ValueError(
                 "document publisher is not in the trusted agricultural source allowlist"
             )
-        document = AgriculturalDocument(extract_text(content, mime_type), metadata)
+        document_id = uuid5(NAMESPACE_URL, f"weathergpt:{metadata.source_id}")
+        document = AgriculturalDocument(extract_text(content, mime_type), metadata, document_id)
+        document_chunks = chunk_document(
+            document, max_characters=max_characters, overlap=overlap
+        )
+        embed_many = getattr(self.embedding_provider, "embed_many", None)
+        if callable(embed_many):
+            embeddings = embed_many(
+                [chunk.text for chunk in document_chunks], task_type="RETRIEVAL_DOCUMENT"
+            )
+        else:
+            embeddings = [
+                self.embedding_provider.embed(chunk.text, task_type="RETRIEVAL_DOCUMENT")
+                for chunk in document_chunks
+            ]
         chunks = [
             DocumentChunk(
                 chunk.document_id,
@@ -41,9 +56,9 @@ class DocumentIngestionService:
                 chunk.text,
                 chunk.metadata,
                 chunk.ordinal,
-                tuple(self.embedding_provider.embed(chunk.text)),
+                tuple(embedding),
             )
-            for chunk in chunk_document(document, max_characters=max_characters, overlap=overlap)
+            for chunk, embedding in zip(document_chunks, embeddings, strict=True)
         ]
         self.repository.add_many(chunks)
         return chunks
