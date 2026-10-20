@@ -10,6 +10,7 @@ const navigation = [
   ["/dashboard", "Dashboard", "⌂"],
   ["/farm", "My farm", "⌖"],
   ["/crops", "My crops", "♧"],
+  ["/crop-health", "Crop health", "✚"],
   ["/weather", "Weather", "☀"],
   ["/recommendations", "Recommendations", "✓"],
   ["/alerts", "Alerts", "!"],

@@ -220,6 +220,43 @@ class FarmerCrop(TimestampMixin, Base):
     recommendations: Mapped[list["Recommendation"]] = relationship(back_populates="farmer_crop")
 
 
+class CropHealthReport(Base):
+    __tablename__ = "crop_health_reports"
+    __table_args__ = (
+        CheckConstraint(
+            "duration_days BETWEEN 1 AND 365", name="ck_crop_health_reports_duration_range"
+        ),
+        Index("ix_crop_health_reports_owner_created", "owner_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    farm_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("farms.id", ondelete="CASCADE"), nullable=False
+    )
+    crop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("farmer_crops.id", ondelete="CASCADE"), nullable=False
+    )
+    symptoms: Mapped[list[str]] = mapped_column(JSONB(), nullable=False)
+    duration_days: Mapped[int] = mapped_column(nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    farm: Mapped[Farm] = relationship()
+    farmer_crop: Mapped[FarmerCrop] = relationship()
+
+    @property
+    def farm_name(self) -> str:
+        return self.farm.name
+
+    @property
+    def crop_name(self) -> str:
+        return self.farmer_crop.crop.name
+
+
 class WeatherObservation(TimestampMixin, Base):
     __tablename__ = "weather_observations"
     __table_args__ = (

@@ -4,6 +4,7 @@ import { Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AuthPage, AlertsPage, CropsPage, RecommendationsPage, ResourcePage, WeatherPage } from "./pages/FeaturePages";
 import { ChatPage } from "./pages/ChatPage";
+import { CropHealthPage } from "./pages/CropHealthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FarmPage } from "./pages/FarmPage";
 import { LocationProvider } from "./location/LocationContext";
@@ -30,6 +31,7 @@ export function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/farm" element={<FarmPage />} />
           <Route path="/crops" element={<CropsPage />} />
+          <Route path="/crop-health" element={<CropHealthPage />} />
           <Route path="/weather" element={<WeatherPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
           <Route path="/alerts" element={<AlertsPage />} />

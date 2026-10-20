@@ -83,6 +83,35 @@ export interface Crop {
   is_active: boolean;
 }
 
+export const CROP_HEALTH_SYMPTOMS = [
+  "leaf_spots",
+  "yellowing",
+  "wilting",
+  "white_powder",
+  "leaf_curling",
+  "leaf_holes",
+  "stem_damage",
+  "fruit_damage",
+  "root_rot",
+  "stunted_growth",
+  "other"
+] as const;
+
+export type CropHealthSymptom = (typeof CROP_HEALTH_SYMPTOMS)[number];
+
+export interface CropHealthReport {
+  id: string;
+  owner_id: string;
+  farm_id: string;
+  farm_name: string;
+  crop_id: string;
+  crop_name: string;
+  symptoms: CropHealthSymptom[];
+  duration_days: number;
+  notes: string | null;
+  created_at: string;
+}
+
 export interface FarmWeather {
   farm_id: string;
   provider: string;
