@@ -36,6 +36,24 @@ class CropHealthReportCreate(BaseModel):
         return value.strip() or None if value is not None else None
 
 
+class CropHealthAnalysisRequest(CropHealthReportCreate):
+    """Unpersisted symptom information used to request a text-based analysis."""
+
+
+class CropHealthSource(BaseModel):
+    source_id: str
+    title: str
+    publisher: str
+    source_uri: str | None
+
+
+class CropHealthAnalysisResponse(BaseModel):
+    status: str
+    analysis: str | None
+    follow_up: str | None
+    sources: list[CropHealthSource]
+
+
 class CropHealthReportResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -5,8 +5,10 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_current_user, get_db_session
+from app.conversation.gemini import GeminiResponseError
 from app.domain.models import Crop, CropHealthReport, Farm, FarmerCrop, User
 from app.main import create_app
+from app.rag.types import DocumentChunk, RetrievedChunk, SourceMetadata
 
 
 class CropHealthSession:
@@ -179,6 +181,160 @@ def test_report_rejects_crop_from_another_farm():
     response = client.post("/api/crop-health/reports", json=payload)
 
     assert response.status_code == 404
+
+
+def test_crop_analysis_uses_retrieved_sources_and_returns_guidance(monkeypatch):
+    from app.api.v1.routes import crop_health
+
+    client, _, session = setup_client()
+    chunk = RetrievedChunk(
+        DocumentChunk(
+            document_id=uuid4(),
+            chunk_id=uuid4(),
+            text="Leaf spots may result from several causes. Remove affected material.",
+            metadata=SourceMetadata(
+                source_id="guide-1",
+                title="Tomato disease guide",
+                publisher="Agricultural Extension",
+                source_uri="https://example.test/tomato-guide",
+                trusted=True,
+            ),
+            ordinal=0,
+        ),
+        score=0.9,
+    )
+
+    class Retriever:
+        def retrieve(self, query, *, limit):
+            assert "Tomato" in query
+            assert "leaf spots" in query
+            assert "7 days" in query
+            assert limit == 5
+            return [chunk]
+
+    class Gemini:
+        def __init__(self, _settings):
+            pass
+
+        def respond(self, question, language, context):
+            assert "not a confirmed diagnosis" in question
+            assert "soil_type" in context
+            assert "guide-1" in context
+            assert language == "mr"
+            return (
+                "Possible causes: leaf spot disease [guide-1]. "
+                "Remove affected material [guide-1]."
+            )
+
+    monkeypatch.setattr(crop_health, "_retrieval_service", lambda _session: Retriever())
+    monkeypatch.setattr(crop_health, "GeminiChatService", Gemini)
+
+    response = client.post("/api/v1/crop-health/analyze", json=valid_payload(session))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "analysis",
+        "analysis": (
+            "Possible causes: leaf spot disease [guide-1]. "
+            "Remove affected material [guide-1]."
+        ),
+        "follow_up": None,
+        "sources": [
+            {
+                "source_id": "guide-1",
+                "title": "Tomato disease guide",
+                "publisher": "Agricultural Extension",
+                "source_uri": "https://example.test/tomato-guide",
+            }
+        ],
+    }
+    assert session.reports == []
+
+
+def test_crop_analysis_requests_more_information_when_no_sources(monkeypatch):
+    from app.api.v1.routes import crop_health
+
+    client, _, session = setup_client()
+
+    class Retriever:
+        def retrieve(self, _query, *, limit):
+            assert limit == 5
+            return []
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("AI should not be called without retrieved sources")
+
+    monkeypatch.setattr(crop_health, "_retrieval_service", lambda _session: Retriever())
+    monkeypatch.setattr(crop_health, "GeminiChatService", fail_if_called)
+
+    response = client.post("/api/v1/crop-health/analyze", json=valid_payload(session))
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "insufficient_information"
+    assert response.json()["analysis"] is None
+    assert "describe what you observe" in response.json()["follow_up"]
+    assert response.json()["sources"] == []
+
+
+def test_crop_analysis_reports_ai_service_failure(monkeypatch):
+    from app.api.v1.routes import crop_health
+
+    client, _, session = setup_client()
+
+    class Retriever:
+        def retrieve(self, _query, *, limit):
+            return [
+                RetrievedChunk(
+                    DocumentChunk(
+                        document_id=uuid4(),
+                        chunk_id=uuid4(),
+                        text="A relevant crop health reference.",
+                        metadata=SourceMetadata(
+                            source_id="guide-1",
+                            title="Crop guide",
+                            publisher="Extension",
+                        ),
+                        ordinal=0,
+                    ),
+                    score=0.8,
+                )
+            ]
+
+    class Gemini:
+        def __init__(self, _settings):
+            pass
+
+        def respond(self, *_args):
+            raise GeminiResponseError("provider unavailable")
+
+    monkeypatch.setattr(crop_health, "_retrieval_service", lambda _session: Retriever())
+    monkeypatch.setattr(crop_health, "GeminiChatService", Gemini)
+
+    response = client.post("/api/v1/crop-health/analyze", json=valid_payload(session))
+
+    assert response.status_code == 503
+    assert response.json()["error"]["message"] == (
+        "Crop health analysis is temporarily unavailable. Please try again."
+    )
+
+
+def test_crop_analysis_reports_retrieval_service_failure(monkeypatch):
+    from app.api.v1.routes import crop_health
+
+    client, _, session = setup_client()
+
+    class Retriever:
+        def retrieve(self, *_args, **_kwargs):
+            raise RuntimeError("retrieval unavailable")
+
+    monkeypatch.setattr(crop_health, "_retrieval_service", lambda _session: Retriever())
+
+    response = client.post("/api/v1/crop-health/analyze", json=valid_payload(session))
+
+    assert response.status_code == 503
+    assert response.json()["error"]["message"] == (
+        "Crop health analysis is temporarily unavailable. Please try again."
+    )
 
 
 def test_report_list_is_scoped_to_authenticated_owner():

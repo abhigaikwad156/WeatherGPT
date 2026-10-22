@@ -2,6 +2,7 @@ import { request } from "./client";
 import type {
   ChatResponse,
   Crop,
+  CropHealthAnalysis,
   CropHealthReport,
   CropHealthSymptom,
   CurrentLocation,
@@ -54,6 +55,17 @@ export const weatherGptApi = {
   getFarmWeather: (farmId: string) => request<FarmWeather>(`/farms/${farmId}/weather?refresh=true`),
   getFarmCrops: (farmId: string) => request<Crop[]>(`/farms/${farmId}/crops`),
   getCropHealthReports: () => request<CropHealthReport[]>("/crop-health/reports"),
+  analyzeCropHealth: (payload: {
+    farm_id: string;
+    crop_id: string;
+    symptoms: CropHealthSymptom[];
+    duration_days: number;
+    notes?: string;
+  }) =>
+    request<CropHealthAnalysis>("/crop-health/analyze", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   createCropHealthReport: (payload: {
     farm_id: string;
     crop_id: string;

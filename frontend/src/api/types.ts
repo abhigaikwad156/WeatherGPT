@@ -112,6 +112,18 @@ export interface CropHealthReport {
   created_at: string;
 }
 
+export interface CropHealthAnalysis {
+  status: "analysis" | "insufficient_information";
+  analysis: string | null;
+  follow_up: string | null;
+  sources: Array<{
+    source_id: string;
+    title: string;
+    publisher: string;
+    source_uri: string | null;
+  }>;
+}
+
 export interface FarmWeather {
   farm_id: string;
   provider: string;

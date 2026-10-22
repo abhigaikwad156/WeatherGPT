@@ -1,8 +1,9 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import {
   CROP_HEALTH_SYMPTOMS,
   type Crop,
+  type CropHealthAnalysis,
   type CropHealthSymptom
 } from "../api/types";
 import { weatherGptApi } from "../api/weatherGpt";
@@ -39,8 +40,17 @@ export function CropHealthPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<CropHealthAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const selectedFarm = farms.data?.find((farm) => farm.id === farmId);
   const selectedCrop = crops.find((crop) => crop.id === cropId);
+
+  const clearAnalysis = () => {
+    setAnalysis(null);
+    setAnalysisError(null);
+  };
 
   useEffect(() => {
     if (!farmId && farms.data?.length) setFarmId(farms.data[0].id);
@@ -67,9 +77,35 @@ export function CropHealthPage() {
   }, [cropRetry, farmId]);
 
   const toggleSymptom = (symptom: CropHealthSymptom) => {
+    clearAnalysis();
     setSymptoms((current) =>
       current.includes(symptom) ? current.filter((item) => item !== symptom) : [...current, symptom]
     );
+  };
+
+  const analyzeCrop = async () => {
+    if (!farmId || !cropId || symptoms.length === 0) {
+      setAnalysisError("Choose a farm, crop, and at least one symptom before analysis.");
+      return;
+    }
+    setAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysis(null);
+    try {
+      const form = new FormData(formRef.current ?? undefined);
+      const result = await weatherGptApi.analyzeCropHealth({
+        farm_id: farmId,
+        crop_id: cropId,
+        symptoms,
+        duration_days: durationDays,
+        notes: String(form.get("notes") ?? "").trim() || undefined
+      });
+      setAnalysis(result);
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Unable to analyze these symptoms.");
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const submitReport = async (event: FormEvent<HTMLFormElement>) => {
@@ -84,6 +120,7 @@ export function CropHealthPage() {
     setFormError(null);
     setSuccessMessage(null);
     try {
+      clearAnalysis();
       await weatherGptApi.createCropHealthReport({
         farm_id: farmId,
         crop_id: cropId,
@@ -122,17 +159,23 @@ export function CropHealthPage() {
           <div className="card-heading">
             <div><p className="eyebrow">New report</p><h2>What are you observing?</h2></div>
           </div>
-          <form className="farm-form crop-health-form" onSubmit={submitReport}>
+          <form className="farm-form crop-health-form" ref={formRef} onSubmit={submitReport}>
             <div className="form-row">
               <label htmlFor="health-farm">Farm
-                <select id="health-farm" value={farmId} required onChange={(event) => setFarmId(event.target.value)}>
+                <select id="health-farm" value={farmId} required onChange={(event) => {
+                  clearAnalysis();
+                  setFarmId(event.target.value);
+                }}>
                   <option value="">Select a farm</option>
                   {farms.data.map((farm) => <option key={farm.id} value={farm.id}>{farm.name}</option>)}
                 </select>
               </label>
               <label htmlFor="health-crop">Crop
                 <select id="health-crop" value={cropId} required disabled={!farmId || loadingCrops || !!cropError}
-                  onChange={(event) => setCropId(event.target.value)}>
+                  onChange={(event) => {
+                    clearAnalysis();
+                    setCropId(event.target.value);
+                  }}>
                   <option value="">{loadingCrops ? "Loading crops…" : "Select a crop"}</option>
                   {crops.map((crop) => <option key={crop.id} value={crop.id}>{crop.name}</option>)}
                 </select>
@@ -161,21 +204,62 @@ export function CropHealthPage() {
             </fieldset>
             <label htmlFor="symptom-duration">How long have you noticed this?
               <select id="symptom-duration" value={durationDays}
-                onChange={(event) => setDurationDays(Number(event.target.value))}>
+                onChange={(event) => {
+                  clearAnalysis();
+                  setDurationDays(Number(event.target.value));
+                }}>
                 {durationOptions.map((days) => <option key={days} value={days}>{days} {days === 1 ? "day" : "days"}</option>)}
               </select>
             </label>
             <label htmlFor="health-notes">Notes <span className="optional-label">(optional)</span>
               <textarea id="health-notes" name="notes" rows={4} maxLength={2000}
+                onChange={clearAnalysis}
                 placeholder="Add any details that may help you remember what you observed." />
             </label>
             {formError && <p className="form-error" role="alert">{formError}</p>}
             {successMessage && <p className="form-success" role="status">{successMessage}</p>}
+            {analysisError && <p className="form-error" role="alert">{analysisError}</p>}
+            <button className="secondary-button" type="button" onClick={() => void analyzeCrop()}
+              disabled={analyzing || saving || !selectedFarm || !selectedCrop || loadingCrops || !!cropError}>
+              {analyzing ? "Analyzing symptoms…" : "Analyze crop symptoms"}
+            </button>
             <button className="primary-button" type="submit"
               disabled={saving || !selectedFarm || !selectedCrop || loadingCrops || !!cropError}>
               {saving ? "Saving report…" : "Save crop health report"}
             </button>
           </form>
+        </Card>
+      )}
+
+      {analysis && (
+        <Card className="crop-health-analysis">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">Text-based guidance</p>
+              <h2>{analysis.status === "analysis" ? "Possible explanations" : "More information needed"}</h2>
+            </div>
+          </div>
+          <p className="crop-health-hint">
+            This is not a confirmed diagnosis. Recommendations are limited to the sources listed below.
+            No crop image was analyzed.
+          </p>
+          {analysis.analysis && <p className="crop-health-analysis-text">{analysis.analysis}</p>}
+          {analysis.follow_up && <p className="crop-health-follow-up">{analysis.follow_up}</p>}
+          {analysis.sources.length > 0 && (
+            <div>
+              <h3>Sources</h3>
+              <ul className="crop-health-sources">
+                {analysis.sources.map((source) => (
+                  <li key={source.source_id}>
+                    {source.source_uri
+                      ? <a href={source.source_uri} target="_blank" rel="noreferrer">{source.title}</a>
+                      : source.title}
+                    {" — "}{source.publisher}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Card>
       )}
 
