@@ -23,6 +23,12 @@ export function AlertCard({ alert }: { alert: AlertItem }) {
 }
 
 export function RecommendationCard({ recommendation }: { recommendation: RecommendationItem }) {
-  const status = recommendation.status === "available" ? "Do this today" : recommendation.status === "needs_input" ? "Need more farm information" : "Not available yet";
+  const status = recommendation.decision
+    ? "Rule-based decision"
+    : recommendation.status === "available"
+      ? "Do this today"
+      : recommendation.status === "needs_input"
+        ? "Need more farm information"
+        : "Not available yet";
   return <article className={`recommendation-card recommendation-${recommendation.status}`}><span className="recommendation-check" aria-hidden="true">{recommendation.status === "available" ? "✓" : "!"}</span><div><p className="eyebrow">{recommendation.recommendationType}</p><h3>{recommendation.summary}</h3><strong className="recommendation-status">{status}</strong></div></article>;
 }

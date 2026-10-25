@@ -11,7 +11,9 @@ import type {
   Farm,
   FarmLocation,
   FarmWeather,
+  FarmerProfile,
   GeocodedPlace,
+  RecommendationsResponse,
   ResolvedLocation
 } from "./types";
 
@@ -101,9 +103,17 @@ export const weatherGptApi = {
   }) => request<Farm>("/farms", { method: "POST", body: JSON.stringify(payload) }),
   getCrops: () => request<unknown>("/farmer-crops"),
   getWeather: () => request<unknown>("/weather"),
-  getRecommendations: () => request<unknown>("/recommendations"),
+  getRecommendations: () => request<RecommendationsResponse>("/recommendations"),
   getAlerts: () => request<AlertItem[]>("/weather-alerts"),
-  getProfile: () => request<AuthTokenResponse["user"]>("/users/me"),
+  getProfile: () => request<FarmerProfile>("/users/me/profile"),
+  updateProfile: (payload: {
+    preferred_language?: string;
+    preferred_units?: "metric" | "imperial";
+  }) =>
+    request<FarmerProfile>("/users/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
   login: (payload: { email: string; password: string }) =>
     request<AuthTokenResponse>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   register: (payload: { display_name: string; email: string; password: string }) =>

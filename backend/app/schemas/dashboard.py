@@ -43,11 +43,12 @@ class DashboardCrop(BaseModel):
 
 
 class DashboardRecommendation(BaseModel):
-    id: UUID
+    id: str
     recommendation_type: str = Field(serialization_alias="recommendationType")
     status: str
     summary: str
     decision_version: str = Field(serialization_alias="decisionVersion")
+    decision: str | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 

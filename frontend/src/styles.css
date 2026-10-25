@@ -65,6 +65,10 @@ button, input, textarea, select { font: inherit; } button { cursor: pointer; } a
 .form-error, .form-success, .crop-health-hint { margin: 0; font-size: .84rem; }
 .form-error { color: #a2382f; }
 .form-success { color: #27764c; font-weight: 700; }
+.profile-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px 20px; margin: 18px 0 0; }
+.profile-details > div { min-width: 0; }
+.profile-details dt { color: #788c7e; font-size: .72rem; font-weight: 700; }
+.profile-details dd { margin: 4px 0 0; color: #284d39; font-size: .86rem; overflow-wrap: anywhere; }
 .crop-health-hint { color: #688070; }
 .crop-health-history > .card-heading { margin-bottom: 15px; }
 .crop-health-report { border: 1px solid #e2eae0; border-radius: 10px; padding: 15px; background: #fbfdf9; }

@@ -1,8 +1,9 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
-import type { Crop, FarmWeather } from "../api/types";
+import type { Crop, FarmerProfile, FarmWeather } from "../api/types";
+import { ApiError } from "../api/client";
 import { weatherGptApi } from "../api/weatherGpt";
-import { AlertCard, ForecastCard, RecommendationCard, WeatherCard } from "../components/dataCards";
+import { AlertCard, ForecastCard, WeatherCard } from "../components/dataCards";
 import { Card, EmptyState, ErrorState, LoadingState } from "../components/ui";
 import { useResource } from "../hooks/useResource";
 
@@ -12,8 +13,70 @@ const featureConfig = {
 
 export function ResourcePage({ resource }: { resource: keyof typeof featureConfig }) {
   const config = featureConfig[resource];
-  const state = useResource(config.load);
-  return <div className="page"><header className="page-header"><div><p className="eyebrow">WeatherGPT</p><h1>{config.title}</h1><p>{config.description}</p></div></header><Card>{state.loading && <LoadingState />}{state.error && <ErrorState message={state.error} retry={state.refresh} />}{!state.loading && !state.error && <EmptyState title={`No ${config.title.toLowerCase()} data yet`} description="This information will appear here when the matching backend API is available." />}</Card></div>;
+  const [profile, setProfile] = useState<FarmerProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [preferredLanguage, setPreferredLanguage] = useState("");
+  const [preferredUnits, setPreferredUnits] = useState("");
+
+  const loadProfile = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const savedProfile = await config.load();
+      setProfile(savedProfile);
+      setPreferredLanguage(savedProfile.preferred_language ?? "");
+      setPreferredUnits(savedProfile.preferred_units ?? "");
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : "Unable to load your profile.");
+    } finally {
+      setLoading(false);
+    }
+  }, [config]);
+
+  useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
+
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!profile || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+    try {
+      const changes: {
+        preferred_language?: string;
+        preferred_units?: "metric" | "imperial";
+      } = { preferred_language: preferredLanguage };
+      if (
+        (preferredUnits === "metric" || preferredUnits === "imperial")
+        && preferredUnits !== profile.preferred_units
+      ) {
+        changes.preferred_units = preferredUnits;
+      }
+      const updatedProfile = await weatherGptApi.updateProfile(changes);
+      setProfile(updatedProfile);
+      setPreferredLanguage(updatedProfile.preferred_language ?? "");
+      setPreferredUnits(updatedProfile.preferred_units ?? "");
+      setSaveSuccess(true);
+    } catch (caught) {
+      setSaveError(
+        caught instanceof ApiError && caught.status === 422
+          ? `Please check your selected preferences. ${caught.message}`
+          : caught instanceof Error
+            ? caught.message
+            : "Unable to save your preferences. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className="page"><header className="page-header"><div><p className="eyebrow">WeatherGPT</p><h1>{config.title}</h1><p>{config.description}</p></div></header>{loading && !profile && <LoadingState label="Loading your profile…" />}{loadError && !profile && <ErrorState message={loadError} retry={loadProfile} />}{profile && <><Card><div className="card-heading"><div><p className="eyebrow">Account</p><h2>{profile.display_name}</h2></div></div><dl className="profile-details"><div><dt>Email</dt><dd>{profile.email || "Not provided"}</dd></div><div><dt>Account ID</dt><dd>{profile.id || "Not provided"}</dd></div><div><dt>Location</dt><dd>{profile.location?.trim() || "Not provided"}</dd></div></dl></Card><Card><div className="card-heading"><div><p className="eyebrow">Preferences</p><h2>Language and units</h2></div></div><form className="farm-form" onSubmit={saveProfile}><label htmlFor="preferred-language">Preferred language<select id="preferred-language" className="profile-select" required value={preferredLanguage} onChange={(event) => { setPreferredLanguage(event.target.value); setSaveSuccess(false); }} disabled={saving}><option value="" disabled>Select a language</option>{preferredLanguage && !["mr", "hi", "en"].includes(preferredLanguage) && <option value={preferredLanguage}>{preferredLanguage}</option>}<option value="mr">मराठी</option><option value="hi">हिन्दी</option><option value="en">English</option></select></label><label htmlFor="preferred-units">Preferred units<select id="preferred-units" className="profile-select" required value={preferredUnits} onChange={(event) => { setPreferredUnits(event.target.value); setSaveSuccess(false); }} disabled={saving}><option value="" disabled>Select units</option>{preferredUnits && !["metric", "imperial"].includes(preferredUnits) && <option value={preferredUnits}>{preferredUnits}</option>}<option value="metric">Metric</option><option value="imperial">Imperial</option></select></label>{loadError && <p className="form-error" role="alert">{loadError}</p>}{saveError && <p className="form-error" role="alert">{saveError}</p>}{saveSuccess && <p className="form-success" role="status">Your preferences were saved.</p>}<button className="primary-button" disabled={saving || loading}>{saving ? "Saving…" : "Save preferences"}</button></form></Card></>}</div>;
 }
 
 export function CropsPage() {
@@ -90,7 +153,8 @@ export function WeatherPage() {
 
 export function RecommendationsPage() {
   const state = useResource(weatherGptApi.getRecommendations);
-  return <div className="page"><header className="page-header"><div><p className="eyebrow">Decision support</p><h1>Agricultural recommendations</h1><p>Recommendations are generated by the backend decision engine with supporting evidence.</p></div></header><Card>{state.loading && <LoadingState />}{state.error && <ErrorState message={state.error} retry={state.refresh} />}{!state.loading && !state.error && Array.isArray(state.data) && state.data.length > 0 ? <div className="stack">{state.data.map((item) => <RecommendationCard key={item.id} recommendation={item} />)}</div> : !state.loading && !state.error && <EmptyState title="No recommendations yet" description="Recommendations will be shown here once farm, crop, and weather data are available." />}</Card></div>;
+  const data = state.data;
+  return <div className="page"><header className="page-header"><div><p className="eyebrow">Decision support</p><h1>Agricultural recommendations</h1><p>Current decisions from configured rules and your farm’s available weather data. Results are not saved as recommendations.</p></div></header>{state.loading && <LoadingState />}{state.error && <ErrorState message={state.error} retry={state.refresh} />}{!state.loading && !state.error && data && <>{data.message && <Card><p role="status">{data.message}</p>{data.farms.length === 0 && <a className="secondary-button" href="/farms">Add a farm</a>}</Card>}{data.farms.map((farm) => <Card key={farm.farmId}><div className="card-heading"><div><p className="eyebrow">{farm.weatherProvider} · weather fetched {new Date(farm.weatherFetchedAt).toLocaleString()}</p><h2>{farm.farmName}</h2></div></div><div className="stack">{farm.recommendations.map((item) => <article key={item.id} className={`recommendation-card recommendation-${item.status}`}><span className="recommendation-check" aria-hidden="true">{item.status === "available" ? "✓" : "!"}</span><div><p className="eyebrow">{item.recommendationType.replaceAll("_", " ")}{item.cropName ? ` · ${item.cropName}` : " · Farm-wide"}</p><h3>{item.status === "available" ? item.decision : "Additional inputs required"}</h3>{item.status === "available" && <p>Rule risk: {item.riskLevel} · Confidence: {Math.round(item.confidence * 100)}%</p>}<ul>{item.reasons.map((reason, index) => <li key={`${item.id}-${index}`}>{reason}</li>)}</ul></div></article>)}</div></Card>)}{data.farms.length > 0 && data.status === "available" && <Card><p>These results are computed from the latest available farm weather and configured deterministic rules. They are not stored as historical recommendations.</p></Card>}</>}</div>;
 }
 
 export function AlertsPage() {

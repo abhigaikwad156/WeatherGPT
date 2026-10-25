@@ -8,7 +8,7 @@ from sqlalchemy.orm import joinedload
 
 from app.api.dependencies import CurrentUser, DatabaseSession
 from app.core.config import get_settings
-from app.domain.models import Farm, FarmerCrop, Recommendation, WeatherAlert
+from app.domain.models import Farm, FarmerCrop, WeatherAlert
 from app.schemas.dashboard import (
     DashboardAlert,
     DashboardCrop,
@@ -16,6 +16,11 @@ from app.schemas.dashboard import (
     DashboardRecommendation,
     DashboardResponse,
     DashboardWeather,
+)
+from app.services.recommendations import (
+    available_dashboard_recommendations,
+    build_farm_recommendations,
+    create_decision_engine,
 )
 from app.weather.factory import build_cache, build_provider
 from app.weather.service import WeatherService
@@ -65,12 +70,10 @@ def read_dashboard(user: CurrentUser, session: DatabaseSession) -> DashboardResp
         )
         .order_by(WeatherAlert.starts_at)
     ).all()
-    recommendations = session.scalars(
-        select(Recommendation)
-        .where(Recommendation.user_id == user.id, Recommendation.farm_id == farm.id)
-        .order_by(Recommendation.generated_at.desc())
-        .limit(10)
-    ).all()
+    recommendations = build_farm_recommendations(
+        session, user.id, farm, weather, create_decision_engine()
+    )
+    recommended_actions = available_dashboard_recommendations([recommendations])
 
     def alert_response(alert: WeatherAlert) -> DashboardAlert:
         return DashboardAlert.model_validate(alert, from_attributes=True)
@@ -99,8 +102,7 @@ def read_dashboard(user: CurrentUser, session: DatabaseSession) -> DashboardResp
             else None
         ),
         recommended_actions=[
-            DashboardRecommendation.model_validate(item, from_attributes=True)
-            for item in recommendations
+            DashboardRecommendation.model_validate(item) for item in recommended_actions
         ],
         upcoming_risks=[alert_response(alert) for alert in alerts],
     )

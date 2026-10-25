@@ -29,6 +29,43 @@ export interface RecommendationItem {
   status: "available" | "needs_input" | "not_available";
   summary: string;
   decisionVersion: string;
+  decision?: string;
+}
+
+export interface DecisionRecommendation {
+  id: string;
+  recommendationType: string;
+  cropId: string | null;
+  cropName: string | null;
+  decision: string;
+  riskLevel: string;
+  confidence: number;
+  status: "available" | "needs_input";
+  reasons: string[];
+}
+
+export interface FarmRecommendations {
+  farmId: string;
+  farmName: string;
+  weatherProvider: string;
+  weatherFetchedAt: string;
+  status: "available" | "insufficient_data";
+  recommendations: DecisionRecommendation[];
+}
+
+export interface RecommendationsResponse {
+  status: "available" | "insufficient_data";
+  message: string | null;
+  farms: FarmRecommendations[];
+}
+
+export interface FarmerProfile {
+  id: string;
+  email: string;
+  display_name: string;
+  preferred_language: string;
+  location: string | null;
+  preferred_units: string;
 }
 
 export interface DashboardData {

@@ -27,7 +27,9 @@ test("shows the saved human-readable current location in the top bar", async () 
     id: "user-b",
     email: "asha@example.com",
     display_name: "Asha Patil",
-    preferred_language: "mr"
+    preferred_language: "mr",
+    location: null,
+    preferred_units: "metric"
   });
 
   render(<MemoryRouter><LocationProvider><AppShell /></LocationProvider></MemoryRouter>);
