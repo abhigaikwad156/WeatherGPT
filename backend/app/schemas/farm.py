@@ -15,11 +15,20 @@ class FarmCreate(BaseModel):
     soil_type: str | None = Field(default=None, max_length=80)
     irrigation_type: str | None = Field(default=None, max_length=80)
     soil_moisture_percent: Decimal | None = Field(default=None, ge=0, le=100)
+    location_name: str | None = Field(default=None, max_length=160)
 
     @field_validator("name")
     @classmethod
     def normalize_name(cls, value: str) -> str:
         return " ".join(value.split())
+
+    @field_validator("location_name")
+    @classmethod
+    def normalize_location_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        return normalized or None
 
 
 class FarmUpdate(BaseModel):

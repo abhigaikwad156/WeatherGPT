@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.v1.routes.alerts import router as alerts_router
 from app.api.v1.routes.auth import router as auth_router
 from app.api.v1.routes.conversations import router as conversations_router
 from app.api.v1.routes.crop_health import router as crop_health_router
@@ -13,6 +14,7 @@ from app.api.v1.routes.weather import router as weather_router
 
 api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
+api_router.include_router(alerts_router, tags=["alerts"])
 api_router.include_router(auth_router, tags=["authentication"])
 api_router.include_router(conversations_router, tags=["conversations"])
 api_router.include_router(crop_health_router, tags=["crop-health"])

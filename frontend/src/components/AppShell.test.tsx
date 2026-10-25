@@ -38,4 +38,5 @@ test("shows the saved human-readable current location in the top bar", async () 
   expect(screen.getAllByText("AP")).toHaveLength(2);
   expect(screen.queryByText("Ramesh Kumar")).not.toBeInTheDocument();
   expect(screen.queryByText("17.000000")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Notifications" })).toHaveAttribute("href", "/alerts");
 });

@@ -109,3 +109,56 @@ def test_nominatim_timeout_is_graceful() -> None:
     )
 
     assert provider.reverse_geocode(Decimal("19.9975"), Decimal("73.7898")) is None
+
+
+def test_nominatim_search_returns_only_valid_named_places() -> None:
+    captured: list[httpx.Request] = []
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "lat": "18.5204",
+                    "lon": "73.8567",
+                    "name": "Pune",
+                    "address": {"city": "Pune", "county": "Pune District", "state": "Maharashtra"},
+                },
+                {"lat": "91", "lon": "73", "name": "Out of range"},
+                {"lat": "19", "lon": "73", "name": ""},
+            ],
+            request=request,
+        )
+
+    provider = NominatimReverseGeocodingProvider(
+        settings(), httpx.Client(transport=httpx.MockTransport(transport))
+    )
+    places = provider.search_locations("Pune, India", "en")
+
+    assert places is not None
+    assert len(places) == 1
+    assert places[0].latitude == Decimal("18.5204")
+    assert places[0].longitude == Decimal("73.8567")
+    assert places[0].location_name == "Pune, Maharashtra"
+    assert places[0].city == "Pune"
+    assert places[0].district == "Pune District"
+    assert captured[0].url.path == "/search"
+    assert dict(captured[0].url.params) == {
+        "format": "jsonv2",
+        "q": "Pune, India",
+        "limit": "5",
+        "addressdetails": "1",
+    }
+    assert captured[0].headers["accept-language"] == "en"
+
+
+def test_nominatim_search_returns_no_results_when_provider_is_unavailable() -> None:
+    provider = NominatimReverseGeocodingProvider(
+        settings(),
+        httpx.Client(
+            transport=httpx.MockTransport(lambda request: httpx.Response(503, request=request))
+        ),
+    )
+
+    assert provider.search_locations("Pune") is None

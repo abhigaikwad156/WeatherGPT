@@ -95,7 +95,7 @@ export function RecommendationsPage() {
 
 export function AlertsPage() {
   const state = useResource(weatherGptApi.getAlerts);
-  return <div className="page"><header className="page-header"><div><p className="eyebrow">Safety first</p><h1>Weather alerts</h1><p>Important weather risks for your farm will appear here.</p></div></header><Card>{state.loading && <LoadingState />}{state.error && <ErrorState message={state.error} retry={state.refresh} />}{!state.loading && !state.error && Array.isArray(state.data) && state.data.length > 0 ? <div className="stack">{state.data.map((item) => <AlertCard key={item.id} alert={item} />)}</div> : !state.loading && !state.error && <EmptyState title="No active alerts" description="You will see weather alerts here when alert rules are configured." />}</Card></div>;
+  return <div className="page"><header className="page-header"><div><p className="eyebrow">Safety first</p><h1>Weather alerts</h1><p>Important weather risks for your farm will appear here.</p></div></header><Card>{state.loading ? <LoadingState /> : state.error ? <ErrorState message={state.error} retry={state.refresh} /> : state.data?.length ? <div className="stack">{state.data.map((item) => <AlertCard key={item.id} alert={item} />)}</div> : <EmptyState title="No active alerts" description="There are no active, unacknowledged weather alerts for your farms." />}</Card></div>;
 }
 
 export function AuthPage({ mode }: { mode: "login" | "register" }) {

@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.models import Farm, WeatherForecast, WeatherObservation
+from app.weather.alerts import generate_weather_alerts
 from app.weather.cache import WeatherCache
 from app.weather.providers import WeatherProvider
 from app.weather.types import NormalizedWeather
@@ -24,7 +25,15 @@ class WeatherService:
         if not refresh and self.cache:
             cached = self.cache.get(farm.id)
             if cached is not None:
-                return cached
+                weather = cached
+            else:
+                weather = self._fetch_and_cache(farm)
+        else:
+            weather = self._fetch_and_cache(farm)
+        generate_weather_alerts(self.session, farm.owner_id, farm, weather)
+        return weather
+
+    def _fetch_and_cache(self, farm: Farm) -> NormalizedWeather:
         weather = self.provider.fetch(farm.id, float(farm.latitude), float(farm.longitude))
         self._persist(farm, weather)
         if self.cache:

@@ -8,15 +8,21 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import get_current_user, get_db_session
 from app.api.v1.routes.locations import get_reverse_geocoder
 from app.domain.models import Farm, User, UserCurrentLocation
-from app.location.reverse_geocoding import ReverseGeocodedLocation
+from app.location.reverse_geocoding import GeocodedPlace, ReverseGeocodedLocation
 from app.main import create_app
 
 
 class FakeReverseGeocoder:
-    def __init__(self, result: ReverseGeocodedLocation | None = None) -> None:
+    def __init__(
+        self,
+        result: ReverseGeocodedLocation | None = None,
+        places: list[GeocodedPlace] | None = None,
+    ) -> None:
         self.result = result
+        self.places = places
         self.calls = 0
         self.coordinates: list[tuple[Decimal, Decimal]] = []
+        self.queries: list[str] = []
 
     def reverse_geocode(
         self,
@@ -29,6 +35,16 @@ class FakeReverseGeocoder:
         self.calls += 1
         self.coordinates.append((latitude, longitude))
         return self.result
+
+    def search_locations(
+        self,
+        query: str,
+        language: str | None = None,
+        *,
+        request_id: str | None = None,
+    ) -> list[GeocodedPlace] | None:
+        self.queries.append(query)
+        return self.places
 
 
 class LocationSession:
@@ -167,6 +183,90 @@ def test_reverse_geocoding_failure_keeps_current_coordinates() -> None:
     assert response.json()["location_name"] is None
     assert session.current_location is not None
     assert session.current_location.latitude == Decimal("17.0")
+
+
+def test_authenticated_farmer_can_search_for_places() -> None:
+    session = LocationSession(make_user())
+    geocoder = FakeReverseGeocoder(
+        places=[
+            GeocodedPlace(
+                Decimal("18.5204"),
+                Decimal("73.8567"),
+                "Pune, Maharashtra",
+                "Pune",
+                "Pune District",
+            )
+        ]
+    )
+    with authenticated_client(session, geocoder) as client:
+        response = client.get("/api/v1/location/search", params={"query": "Pune"})
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "latitude": "18.5204",
+            "longitude": "73.8567",
+            "location_name": "Pune, Maharashtra",
+            "city": "Pune",
+            "district": "Pune District",
+        }
+    ]
+    assert geocoder.queries == ["Pune"]
+
+
+def test_place_search_rejects_short_queries_and_reports_provider_failure() -> None:
+    session = LocationSession(make_user())
+    with authenticated_client(session) as client:
+        short_query = client.get("/api/v1/location/search", params={"query": "ab"})
+
+    geocoder = FakeReverseGeocoder(places=None)
+    with authenticated_client(session, geocoder) as client:
+        unavailable = client.get("/api/v1/location/search", params={"query": "Pune"})
+
+    assert short_query.status_code == 422
+    assert unavailable.status_code == 503
+
+
+def test_place_search_and_reverse_geocoding_require_authentication() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        search_response = client.get("/api/v1/location/search", params={"query": "Pune"})
+        reverse_response = client.post(
+            "/api/v1/location/reverse", json={"latitude": 18.5, "longitude": 73.8}
+        )
+
+    assert search_response.status_code == reverse_response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"latitude": 90.1, "longitude": 73.8},
+        {"latitude": 18.5, "longitude": -180.1},
+    ],
+)
+def test_reverse_geocoding_rejects_invalid_coordinates(payload: dict[str, float]) -> None:
+    with authenticated_client(LocationSession(make_user())) as client:
+        response = client.post("/api/v1/location/reverse", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_selected_farm_coordinates_can_be_reverse_geocoded() -> None:
+    session = LocationSession(make_user())
+    geocoder = FakeReverseGeocoder(
+        ReverseGeocodedLocation(
+            "Pune, Maharashtra", "Pune", "Pune District", "Maharashtra", "India", "IN"
+        )
+    )
+    with authenticated_client(session, geocoder) as client:
+        response = client.post(
+            "/api/v1/location/reverse", json={"latitude": 18.5, "longitude": 73.8}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["location_name"] == "Pune, Maharashtra"
+    assert response.json()["district"] == "Pune District"
 
 
 @pytest.mark.parametrize(

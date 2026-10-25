@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { weatherGptApi } from "../api/weatherGpt";
-import { LocationProvider } from "../location/LocationContext";
 import { FarmPage } from "./FarmPage";
 
 vi.mock("../api/weatherGpt", () => ({
@@ -10,69 +9,75 @@ vi.mock("../api/weatherGpt", () => ({
     getFarms: vi.fn(),
     getFarmLocation: vi.fn(),
     getFarmCrops: vi.fn(),
-    getCurrentLocation: vi.fn(),
-    saveCurrentLocation: vi.fn(),
-    useCurrentLocationForFarm: vi.fn(),
-    createFarm: vi.fn()
+    createFarm: vi.fn(),
+    updateFarmLocation: vi.fn()
   }
 }));
 
-const currentLocation = {
-  latitude: "17.000000",
-  longitude: "74.000000",
-  accuracy_meters: "25.00",
-  updated_at: "2026-09-18T00:00:00Z",
-  location_name: "Current location",
-  city: "Current location",
-  district: null,
-  state: "Maharashtra",
-  country: "India",
-  country_code: "IN"
-};
+vi.mock("../components/LocationMapPicker", () => ({
+  LocationMapPicker: ({
+    onConfirm
+  }: {
+    onConfirm: (selection: {
+      latitude: number;
+      longitude: number;
+      location_name: string | null;
+    }) => void;
+  }) => (
+    <button
+      type="button"
+      onClick={() =>
+        onConfirm({
+          latitude: 18.5204,
+          longitude: 73.8567,
+          location_name: "Pune, Maharashtra"
+        })
+      }
+    >
+      Select test farm location
+    </button>
+  )
+}));
 
 beforeEach(() => {
-  vi.mocked(weatherGptApi.getFarms).mockResolvedValue([
-    { id: "farm-1", name: "My farm", latitude: 18, longitude: 73, area_hectares: 2, soil_type: "Loamy", irrigation_type: "Drip", soil_moisture_percent: null }
-  ]);
-  vi.mocked(weatherGptApi.getFarmLocation).mockResolvedValue({
-    latitude: 18,
-    longitude: 73,
-    accuracy_meters: null,
-    location_name: "Farm location",
-    created_at: "2026-09-18T00:00:00Z",
-    updated_at: "2026-09-18T00:00:00Z"
-  });
-  vi.mocked(weatherGptApi.getFarmCrops).mockResolvedValue([]);
-  vi.mocked(weatherGptApi.getCurrentLocation).mockResolvedValue(currentLocation);
-  vi.mocked(weatherGptApi.saveCurrentLocation).mockResolvedValue(currentLocation);
-  vi.mocked(weatherGptApi.useCurrentLocationForFarm).mockResolvedValue({
-    latitude: 17,
-    longitude: 74,
-    accuracy_meters: 25,
-    location_name: null,
-    created_at: "2026-09-18T00:00:00Z",
-    updated_at: "2026-09-18T00:00:00Z"
+  vi.mocked(weatherGptApi.getFarms).mockResolvedValue([]);
+  vi.mocked(weatherGptApi.createFarm).mockResolvedValue({
+    id: "farm-1",
+    name: "My farm",
+    latitude: 18.5204,
+    longitude: 73.8567,
+    area_hectares: 2,
+    soil_type: null,
+    irrigation_type: null,
+    soil_moisture_percent: null
   });
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  Object.defineProperty(navigator, "geolocation", { configurable: true, value: undefined });
-});
+afterEach(() => vi.restoreAllMocks());
 
-test("keeps the farm location separate and confirms an explicit current-location choice", async () => {
-  const position = { coords: { latitude: 17, longitude: 74, accuracy: 25 } } as GeolocationPosition;
-  Object.defineProperty(navigator, "geolocation", {
-    configurable: true,
-    value: { getCurrentPosition: vi.fn((resolve: PositionCallback) => resolve(position)) }
+test("saves only the confirmed map coordinates and resolved location name", async () => {
+  render(<FarmPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Select test farm location" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Farm name" }), {
+    target: { value: "My farm" }
   });
+  fireEvent.change(screen.getByRole("spinbutton", { name: "Area (hectares)" }), {
+    target: { value: "2" }
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save farm" }));
 
-  render(<LocationProvider><FarmPage /></LocationProvider>);
-  expect(await screen.findByText("Farm location")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Edit farm location" }));
-  fireEvent.click(screen.getAllByRole("button", { name: /use my current location/i })[0]);
-  fireEvent.click(screen.getByRole("button", { name: "Allow location" }));
-  fireEvent.click(await screen.findByRole("button", { name: "Confirm farm" }));
-
-  await waitFor(() => expect(weatherGptApi.useCurrentLocationForFarm).toHaveBeenCalledWith("farm-1"));
+  await waitFor(() =>
+    expect(weatherGptApi.createFarm).toHaveBeenCalledWith({
+      name: "My farm",
+      latitude: 18.5204,
+      longitude: 73.8567,
+      location_name: "Pune, Maharashtra",
+      area_hectares: 2,
+      soil_type: undefined,
+      irrigation_type: undefined,
+      soil_moisture_percent: undefined
+    })
+  );
+  expect(weatherGptApi.getFarms).toHaveBeenCalledTimes(2);
 });

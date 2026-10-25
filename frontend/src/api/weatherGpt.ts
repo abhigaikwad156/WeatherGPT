@@ -1,5 +1,6 @@
 import { request } from "./client";
 import type {
+  AlertItem,
   ChatResponse,
   Crop,
   CropHealthAnalysis,
@@ -9,7 +10,9 @@ import type {
   DashboardData,
   Farm,
   FarmLocation,
-  FarmWeather
+  FarmWeather,
+  GeocodedPlace,
+  ResolvedLocation
 } from "./types";
 
 export interface AuthTokenResponse {
@@ -37,6 +40,13 @@ export const weatherGptApi = {
       headers: requestId ? { "X-Request-ID": requestId } : undefined
     }),
   getFarmLocation: (farmId: string) => request<FarmLocation>(`/farms/${farmId}/location`),
+  searchLocations: (query: string) =>
+    request<GeocodedPlace[]>(`/location/search?query=${encodeURIComponent(query)}`),
+  reverseGeocodeLocation: (latitude: number, longitude: number) =>
+    request<ResolvedLocation | null>("/location/reverse", {
+      method: "POST",
+      body: JSON.stringify({ latitude, longitude })
+    }),
   updateFarmLocation: (
     farmId: string,
     payload: {
@@ -87,11 +97,12 @@ export const weatherGptApi = {
     soil_type?: string;
     irrigation_type?: string;
     soil_moisture_percent?: number;
+    location_name?: string;
   }) => request<Farm>("/farms", { method: "POST", body: JSON.stringify(payload) }),
   getCrops: () => request<unknown>("/farmer-crops"),
   getWeather: () => request<unknown>("/weather"),
   getRecommendations: () => request<unknown>("/recommendations"),
-  getAlerts: () => request<unknown>("/weather-alerts"),
+  getAlerts: () => request<AlertItem[]>("/weather-alerts"),
   getProfile: () => request<AuthTokenResponse["user"]>("/users/me"),
   login: (payload: { email: string; password: string }) =>
     request<AuthTokenResponse>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),

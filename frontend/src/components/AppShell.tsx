@@ -48,7 +48,7 @@ export function AppShell() {
       <main className="main-content">
         <header className="topbar">
           <div className="location"><span>⌖</span><div><small>CURRENT LOCATION</small><strong>{loadingSavedLocation ? "Checking saved location…" : locationDisplayName(currentLocation)}</strong></div></div>
-          <div className="topbar-actions"><details className="location-menu"><summary>Update location</summary><LocationConsent /><small className="osm-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></small></details><button className="icon-button" aria-label="Notifications">♢<span className="notification-dot" /></button><NavLink to="/settings" className="topbar-user"><span className="avatar avatar-small">{initials}</span><span>{firstName}</span><b>⌄</b></NavLink></div>
+          <div className="topbar-actions"><details className="location-menu"><summary>Update location</summary><LocationConsent /><small className="osm-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></small></details><NavLink to="/alerts" className="icon-button" aria-label="Notifications">♢</NavLink><NavLink to="/settings" className="topbar-user"><span className="avatar avatar-small">{initials}</span><span>{firstName}</span><b>⌄</b></NavLink></div>
         </header>
         <Outlet />
       </main>

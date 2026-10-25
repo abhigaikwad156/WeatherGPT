@@ -73,6 +73,23 @@ export interface FarmLocation {
   updated_at: string;
 }
 
+export interface GeocodedPlace {
+  latitude: number | string;
+  longitude: number | string;
+  location_name: string;
+  city: string | null;
+  district: string | null;
+}
+
+export interface ResolvedLocation {
+  location_name: string | null;
+  city: string | null;
+  district: string | null;
+  state: string | null;
+  country: string | null;
+  country_code: string | null;
+}
+
 export interface Crop {
   id: string;
   farm_id: string;

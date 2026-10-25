@@ -14,10 +14,12 @@ def test_farm_schema_validates_coordinates_and_moisture() -> None:
         latitude=18.52,
         longitude=73.85,
         soil_moisture_percent=Decimal("42.5"),
+        location_name="  Example   Village, Maharashtra  ",
     )
 
     assert farm.name == "Green Valley Farm"
     assert farm.soil_moisture_percent == Decimal("42.5")
+    assert farm.location_name == "Example Village, Maharashtra"
 
     with pytest.raises(ValidationError):
         FarmCreate(name="Farm", latitude=91, longitude=73)

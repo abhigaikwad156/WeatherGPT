@@ -75,7 +75,7 @@ def read_dashboard(user: CurrentUser, session: DatabaseSession) -> DashboardResp
     def alert_response(alert: WeatherAlert) -> DashboardAlert:
         return DashboardAlert.model_validate(alert, from_attributes=True)
 
-    return DashboardResponse(
+    response = DashboardResponse(
         current_weather=DashboardWeather(
             temperature_celsius=weather.current.temperature_celsius if weather.current else None,
             condition=weather.current.condition if weather.current else None,
@@ -104,3 +104,5 @@ def read_dashboard(user: CurrentUser, session: DatabaseSession) -> DashboardResp
         ],
         upcoming_risks=[alert_response(alert) for alert in alerts],
     )
+    session.commit()
+    return response

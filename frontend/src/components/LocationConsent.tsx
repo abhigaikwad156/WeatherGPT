@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import type { CurrentLocation } from "../api/types";
 import { useCurrentLocation, type LocationErrorKind } from "../location/LocationContext";
 import { locationDisplayName } from "../location/locationDisplay";
 
@@ -11,14 +12,18 @@ const errorMessages: Record<LocationErrorKind, string> = {
   "backend-error": "Location was detected, but we couldn't save it."
 };
 
-export function LocationConsent({ onDetected }: { onDetected?: () => void }) {
+export function LocationConsent({
+  onDetected
+}: {
+  onDetected?: (location: CurrentLocation) => void;
+}) {
   const [explaining, setExplaining] = useState(false);
   const { clearLocationError, currentLocation, detectAndSaveCurrentLocation, errorKind, locationLoading, locationPhase } =
     useCurrentLocation();
 
   async function allowLocation() {
     const location = await detectAndSaveCurrentLocation();
-    if (location) onDetected?.();
+    if (location) onDetected?.(location);
   }
 
   if (!explaining) {

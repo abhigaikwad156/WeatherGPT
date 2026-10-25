@@ -4,7 +4,7 @@ import logging
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 from app.api.dependencies import CurrentUser, DatabaseSession
 from app.core.config import get_settings
@@ -12,7 +12,13 @@ from app.location.reverse_geocoding import (
     NominatimReverseGeocodingProvider,
     ReverseGeocodingProvider,
 )
-from app.schemas.location import CurrentLocationResponse, CurrentLocationUpsert
+from app.schemas.location import (
+    CurrentLocationResponse,
+    CurrentLocationUpsert,
+    GeocodedPlaceResponse,
+    ReverseGeocodedLocationResponse,
+    ReverseGeocodeRequest,
+)
 from app.services.locations import get_current_location, save_current_location
 
 router = APIRouter(prefix="/location")
@@ -103,3 +109,46 @@ def read_current_device_location(
             status_code=status.HTTP_404_NOT_FOUND, detail="Current location not found"
         )
     return CurrentLocationResponse.model_validate(location)
+
+
+@router.get(
+    "/search",
+    response_model=list[GeocodedPlaceResponse],
+    summary="Search for places after an explicit user submission",
+    responses={
+        401: {"description": "Missing, invalid, or expired bearer token"},
+        422: {"description": "Search query is too short or too long"},
+        503: {"description": "The place search provider is unavailable"},
+    },
+)
+def search_places(
+    query: Annotated[str, Query(min_length=3, max_length=120)],
+    user: CurrentUser,
+    reverse_geocoder: Annotated[ReverseGeocodingProvider, Depends(get_reverse_geocoder)],
+) -> list[GeocodedPlaceResponse]:
+    normalized_query = query.strip()
+    if len(normalized_query) < 3:
+        raise HTTPException(
+            status_code=422, detail="Search query must contain at least 3 characters"
+        )
+    places = reverse_geocoder.search_locations(normalized_query, user.preferred_language)
+    if places is None:
+        raise HTTPException(status_code=503, detail="Location search is temporarily unavailable")
+    return [GeocodedPlaceResponse.model_validate(place) for place in places]
+
+
+@router.post(
+    "/reverse",
+    response_model=ReverseGeocodedLocationResponse | None,
+    summary="Resolve locality details for an explicitly selected map coordinate",
+    responses={401: {"description": "Missing, invalid, or expired bearer token"}},
+)
+def reverse_geocode_selected_place(
+    request: ReverseGeocodeRequest,
+    user: CurrentUser,
+    reverse_geocoder: Annotated[ReverseGeocodingProvider, Depends(get_reverse_geocoder)],
+) -> ReverseGeocodedLocationResponse | None:
+    place = reverse_geocoder.reverse_geocode(
+        request.latitude, request.longitude, user.preferred_language
+    )
+    return ReverseGeocodedLocationResponse.model_validate(place) if place else None

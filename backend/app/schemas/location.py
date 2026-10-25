@@ -67,3 +67,29 @@ class FarmLocationResponse(BaseModel):
     location_name: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class ReverseGeocodeRequest(BaseModel):
+    latitude: Decimal = Field(ge=-90, le=90)
+    longitude: Decimal = Field(ge=-180, le=180)
+
+
+class GeocodedPlaceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    latitude: Decimal = Field(ge=-90, le=90)
+    longitude: Decimal = Field(ge=-180, le=180)
+    location_name: str
+    city: str | None
+    district: str | None
+
+
+class ReverseGeocodedLocationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    location_name: str | None
+    city: str | None
+    district: str | None
+    state: str | None
+    country: str | None
+    country_code: str | None

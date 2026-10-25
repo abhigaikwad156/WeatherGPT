@@ -27,6 +27,17 @@ class ReverseGeocodedLocation:
     country_code: str | None
 
 
+@dataclass(frozen=True)
+class GeocodedPlace:
+    """A provider-returned place and only the coordinates needed to select it."""
+
+    latitude: Decimal
+    longitude: Decimal
+    location_name: str
+    city: str | None
+    district: str | None
+
+
 class ReverseGeocodingProvider(Protocol):
     def reverse_geocode(
         self,
@@ -36,6 +47,14 @@ class ReverseGeocodingProvider(Protocol):
         *,
         request_id: str | None = None,
     ) -> ReverseGeocodedLocation | None: ...
+
+    def search_locations(
+        self,
+        query: str,
+        language: str | None = None,
+        *,
+        request_id: str | None = None,
+    ) -> list[GeocodedPlace] | None: ...
 
 
 def _text(value: object) -> str | None:
@@ -92,6 +111,25 @@ class NominatimReverseGeocodingProvider:
         self._headers = {"User-Agent": settings.nominatim_user_agent}
         self._location_debug = settings.location_debug
 
+    def _get(
+        self, endpoint: str, params: Mapping[str, object], language: str | None
+    ) -> httpx.Response:
+        headers = dict(self._headers)
+        if language:
+            headers["Accept-Language"] = language
+        with self._request_lock:
+            now = self._monotonic_clock()
+            if self._last_request_at is not None:
+                wait_seconds = 1 - (now - self._last_request_at)
+                if wait_seconds > 0:
+                    self._sleep(wait_seconds)
+            self._last_request_at = self._monotonic_clock()
+            return self._client.get(
+                f"{self._base_url}/{endpoint}",
+                params=params,
+                headers=headers,
+            )
+
     def reverse_geocode(
         self,
         latitude: Decimal,
@@ -100,9 +138,6 @@ class NominatimReverseGeocodingProvider:
         *,
         request_id: str | None = None,
     ) -> ReverseGeocodedLocation | None:
-        headers = dict(self._headers)
-        if language:
-            headers["Accept-Language"] = language
         try:
             if self._location_debug:
                 logger.info(
@@ -111,23 +146,16 @@ class NominatimReverseGeocodingProvider:
                     longitude,
                     extra={"request_id": request_id},
                 )
-            with self._request_lock:
-                now = self._monotonic_clock()
-                if self._last_request_at is not None:
-                    wait_seconds = 1 - (now - self._last_request_at)
-                    if wait_seconds > 0:
-                        self._sleep(wait_seconds)
-                self._last_request_at = self._monotonic_clock()
-                response = self._client.get(
-                    f"{self._base_url}/reverse",
-                    params={
-                        "format": "jsonv2",
-                        "lat": str(latitude),
-                        "lon": str(longitude),
-                        "addressdetails": 1,
-                    },
-                    headers=headers,
-                )
+            response = self._get(
+                "reverse",
+                {
+                    "format": "jsonv2",
+                    "lat": str(latitude),
+                    "lon": str(longitude),
+                    "addressdetails": 1,
+                },
+                language,
+            )
             if response.status_code in (403, 429) or response.status_code >= 500:
                 return None
             response.raise_for_status()
@@ -142,5 +170,66 @@ class NominatimReverseGeocodingProvider:
                     extra={"request_id": request_id},
                 )
             return normalize_nominatim_address(payload)
+        except (httpx.HTTPError, TypeError, ValueError):
+            return None
+
+    def search_locations(
+        self,
+        query: str,
+        language: str | None = None,
+        *,
+        request_id: str | None = None,
+    ) -> list[GeocodedPlace] | None:
+        try:
+            response = self._get(
+                "search",
+                {
+                    "format": "jsonv2",
+                    "q": query,
+                    "limit": 5,
+                    "addressdetails": 1,
+                },
+                language,
+            )
+            if response.status_code in (403, 429) or response.status_code >= 500:
+                return None
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, list):
+                return None
+
+            places: list[GeocodedPlace] = []
+            for item in payload:
+                if not isinstance(item, Mapping):
+                    continue
+                try:
+                    latitude = Decimal(str(item["lat"]))
+                    longitude = Decimal(str(item["lon"]))
+                    if (
+                        not latitude.is_finite()
+                        or not longitude.is_finite()
+                        or not Decimal("-90") <= latitude <= Decimal("90")
+                        or not Decimal("-180") <= longitude <= Decimal("180")
+                    ):
+                        continue
+                except (KeyError, TypeError, ValueError):
+                    continue
+
+                address = normalize_nominatim_address(item)
+                location_name = (
+                    address.location_name if address is not None else None
+                ) or _text(item.get("name"))
+                if location_name is None:
+                    continue
+                places.append(
+                    GeocodedPlace(
+                        latitude=latitude,
+                        longitude=longitude,
+                        location_name=location_name,
+                        city=address.city if address is not None else None,
+                        district=address.district if address is not None else None,
+                    )
+                )
+            return places
         except (httpx.HTTPError, TypeError, ValueError):
             return None
