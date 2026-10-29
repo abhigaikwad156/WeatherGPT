@@ -1,6 +1,11 @@
 # WeatherGPT
 
-WeatherGPT is an agricultural weather decision-support system. The current implementation is backend infrastructure only; no weather, AI, farmer, or agricultural-recommendation features have been added.
+WeatherGPT is an agricultural weather decision-support system with a React frontend and FastAPI
+backend. It supports farmer profiles, farm and crop ownership, weather-backed deterministic
+recommendations, alerts, conversational weather responses, and safeguarded crop-health/RAG flows.
+
+For the public Vercel + Render + Neon + Upstash deployment configuration and exact dashboard
+settings, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Local setup
 

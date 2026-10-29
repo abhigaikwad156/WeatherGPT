@@ -1,0 +1,58 @@
+services:
+  - type: web
+    name: weathergpt-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install .
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: API_V1_PREFIX
+        value: /api/v1
+      - key: LOG_LEVEL
+        value: INFO
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: WEATHER_PROVIDER
+        value: open_meteo
+      - key: WEATHER_API_URL
+        value: https://api.open-meteo.com/v1/forecast
+      - key: WEATHER_API_TIMEOUT_SECONDS
+        value: "5"
+      - key: WEATHER_API_RETRIES
+        value: "2"
+      - key: WEATHER_CACHE_TTL_SECONDS
+        value: "300"
+      - key: NOMINATIM_BASE_URL
+        value: https://nominatim.openstreetmap.org
+      - key: NOMINATIM_TIMEOUT_SECONDS
+        value: "5"
+      - key: RAG_EMBEDDING_DIMENSION
+        value: "1536"
+      # Set the following values in the Render dashboard. They are intentionally
+      # not committed because they are secrets or deployment-specific policy.
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: NOMINATIM_USER_AGENT
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false
+      - key: RAG_EMBEDDING_MODEL
+        sync: false
+      - key: RAG_MINIMUM_SCORE
+        sync: false
+      - key: RAG_TRUSTED_PUBLISHERS
+        sync: false
