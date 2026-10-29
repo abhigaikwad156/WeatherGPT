@@ -1,8 +1,10 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type { Crop, FarmerProfile, FarmWeather } from "../api/types";
 import { ApiError } from "../api/client";
 import { weatherGptApi } from "../api/weatherGpt";
+import { storeAccessToken } from "../auth/session";
 import { AlertCard, ForecastCard, WeatherCard } from "../components/dataCards";
 import { Card, EmptyState, ErrorState, LoadingState } from "../components/ui";
 import { useResource } from "../hooks/useResource";
@@ -163,6 +165,7 @@ export function AlertsPage() {
 }
 
 export function AuthPage({ mode }: { mode: "login" | "register" }) {
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const isRegister = mode === "register";
@@ -173,8 +176,8 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
       const response = isRegister
         ? await weatherGptApi.register({ display_name: String(form.get("name")), email: String(form.get("email")), password: String(form.get("password")) })
         : await weatherGptApi.login({ email: String(form.get("email")), password: String(form.get("password")) });
-      localStorage.setItem("weathergpt_access_token", response.access_token);
-      window.location.href = "/dashboard";
+      storeAccessToken(response.access_token);
+      navigate("/dashboard", { replace: true });
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Unable to continue."); } finally { setSubmitting(false); }
   };
   return <main className="auth-page"><section className="auth-intro"><span>🌱</span><h1>WeatherGPT</h1><p>Clear, practical weather support for your farm.</p></section><section className="auth-card"><p className="eyebrow">Welcome</p><h2>{isRegister ? "Create your farmer account" : "Sign in to your account"}</h2><form onSubmit={submit}>{isRegister && <label>Name<input name="name" required autoComplete="name" /></label>}<label>Email<input name="email" required type="email" autoComplete="email" /></label><label>Password<input name="password" required type="password" minLength={8} autoComplete={isRegister ? "new-password" : "current-password"} /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button" disabled={submitting}>{submitting ? "Please wait…" : isRegister ? "Create account" : "Sign in"}</button></form><p>{isRegister ? "Already have an account?" : "New to WeatherGPT?"} <a href={isRegister ? "/login" : "/register"}>{isRegister ? "Sign in" : "Create an account"}</a></p></section></main>;

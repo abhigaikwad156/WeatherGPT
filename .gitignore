@@ -15,3 +15,5 @@ frontend/dist/
 .vscode/
 .idea/
 Thumbs.db
+.neon
+node_modules/

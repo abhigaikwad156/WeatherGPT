@@ -1,10 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { expect, test, vi } from "vitest";
 
 import { weatherGptApi } from "../api/weatherGpt";
 import { LocationProvider } from "../location/LocationContext";
 import { AppShell } from "./AppShell";
+import { ACCESS_TOKEN_STORAGE_KEY } from "../auth/session";
 
 vi.mock("../api/weatherGpt", () => ({
   weatherGptApi: { getCurrentLocation: vi.fn(), getProfile: vi.fn() }
@@ -41,4 +42,35 @@ test("shows the saved human-readable current location in the top bar", async () 
   expect(screen.queryByText("Ramesh Kumar")).not.toBeInTheDocument();
   expect(screen.queryByText("17.000000")).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Notifications" })).toHaveAttribute("href", "/alerts");
+});
+
+test("provides logout controls for desktop and mobile navigation", async () => {
+  localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, "access-token");
+  vi.mocked(weatherGptApi.getCurrentLocation).mockResolvedValue({
+    latitude: "17.000000",
+    longitude: "74.000000",
+    accuracy_meters: "25.00",
+    updated_at: "2026-09-18T00:00:00Z",
+    location_name: "Saved current location",
+    city: "Saved current location",
+    district: null,
+    state: "Maharashtra",
+    country: "India",
+    country_code: "IN"
+  });
+  vi.mocked(weatherGptApi.getProfile).mockResolvedValue({
+    id: "user-b",
+    email: "asha@example.com",
+    display_name: "Asha Patil",
+    preferred_language: "mr",
+    location: null,
+    preferred_units: "metric"
+  });
+
+  render(<MemoryRouter><LocationProvider><AppShell /></LocationProvider></MemoryRouter>);
+
+  const logoutButtons = await screen.findAllByRole("button", { name: "Log out" });
+  expect(logoutButtons).toHaveLength(2);
+  fireEvent.click(logoutButtons[0]);
+  expect(localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)).toBeNull();
 });

@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 
 import { weatherGptApi } from "../api/weatherGpt";
+import { clearAuthenticatedSession } from "../auth/session";
 import { useResource } from "../hooks/useResource";
 import { useCurrentLocation } from "../location/LocationContext";
 import { locationDisplayName } from "../location/locationDisplay";
@@ -43,6 +44,7 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
+        <button className="logout-button" type="button" onClick={clearAuthenticatedSession}><span aria-hidden="true">⇥</span>Log out</button>
         <div className="sidebar-help"><span className="help-icon">?</span><div><strong>Need help?</strong><p>Ask WeatherGPT in Marathi, Hindi, or English.</p></div></div>
       </aside>
       <main className="main-content">
@@ -58,6 +60,7 @@ export function AppShell() {
             <span>{icon}</span><small>{label}</small>
           </NavLink>
         ))}
+        <button className="mobile-logout" type="button" onClick={clearAuthenticatedSession}><span aria-hidden="true">⇥</span><small>Log out</small></button>
       </nav>
     </div>
   );

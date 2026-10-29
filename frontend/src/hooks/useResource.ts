@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { SessionChangedError } from "../auth/session";
 
 export function useResource<T>(load: () => Promise<T>) {
+  const mounted = useRef(true);
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -9,16 +12,21 @@ export function useResource<T>(load: () => Promise<T>) {
     setLoading(true);
     setError(null);
     try {
-      setData(await load());
+      const result = await load();
+      if (mounted.current) setData(result);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to load this information.");
+      if (mounted.current && !(caught instanceof SessionChangedError)) {
+        setError(caught instanceof Error ? caught.message : "Unable to load this information.");
+      }
     } finally {
-      setLoading(false);
+      if (mounted.current) setLoading(false);
     }
   }, [load]);
 
   useEffect(() => {
+    mounted.current = true;
     void refresh();
+    return () => { mounted.current = false; };
   }, [refresh]);
 
   return { data, error, loading, refresh };

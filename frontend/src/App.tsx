@@ -1,6 +1,11 @@
-import { useEffect } from "react";
-import { Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
+import {
+  hasActiveAccessToken,
+  SESSION_CHANGED_EVENT,
+  UNAUTHORIZED_EVENT
+} from "./auth/session";
 import { AppShell } from "./components/AppShell";
 import { AuthPage, AlertsPage, CropsPage, RecommendationsPage, ResourcePage, WeatherPage } from "./pages/FeaturePages";
 import { ChatPage } from "./pages/ChatPage";
@@ -10,20 +15,36 @@ import { FarmPage } from "./pages/FarmPage";
 import { LocationProvider } from "./location/LocationContext";
 
 function RequireAuthentication() {
-  return localStorage.getItem("weathergpt_access_token") ? <Outlet /> : <Navigate to="/login" replace />;
+  const hasAccessToken = hasActiveAccessToken();
+  return hasAccessToken ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
 export function App() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [sessionVersion, setSessionVersion] = useState(0);
 
   useEffect(() => {
-    const returnToLogin = () => navigate("/login", { replace: true });
-    window.addEventListener("weathergpt:unauthorized", returnToLogin);
-    return () => window.removeEventListener("weathergpt:unauthorized", returnToLogin);
-  }, [navigate]);
+    const returnToLogin = () => {
+      if (location.pathname !== "/login" && location.pathname !== "/register") {
+        navigate("/login", { replace: true });
+      }
+    };
+    const resetProtectedState = () => {
+      setSessionVersion((version) => version + 1);
+      returnToLogin();
+    };
+
+    window.addEventListener(UNAUTHORIZED_EVENT, returnToLogin);
+    window.addEventListener(SESSION_CHANGED_EVENT, resetProtectedState);
+    return () => {
+      window.removeEventListener(UNAUTHORIZED_EVENT, returnToLogin);
+      window.removeEventListener(SESSION_CHANGED_EVENT, resetProtectedState);
+    };
+  }, [location.pathname, navigate]);
 
   return (
-    <Routes>
+    <Routes key={sessionVersion}>
       <Route path="/login" element={<AuthPage mode="login" />} />
       <Route path="/register" element={<AuthPage mode="register" />} />
       <Route element={<RequireAuthentication />}>
