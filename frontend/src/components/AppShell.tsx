@@ -53,7 +53,11 @@ export function AppShell() {
         <Outlet />
       </main>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {navigation.slice(0, 5).map(([to, label, icon]) => <NavLink key={to} to={to}><span>{icon}</span><small>{label}</small></NavLink>)}
+        {navigation.map(([to, label, icon]) => (
+          <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : undefined)}>
+            <span>{icon}</span><small>{label}</small>
+          </NavLink>
+        ))}
       </nav>
     </div>
   );

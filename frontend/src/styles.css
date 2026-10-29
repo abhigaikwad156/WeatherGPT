@@ -104,3 +104,109 @@ button, input, textarea, select { font: inherit; } button { cursor: pointer; } a
 .farm-location-picker .location-confirmation { display: grid; gap: 4px; }
 .farm-location-picker .location-confirmation > p { overflow-wrap: anywhere; }
 @media (max-width: 550px) { .location-search-controls { flex-direction: column; }.farm-location-map { min-height: 260px; height: 42vh; }.location-search-results button { flex-direction: column; gap: 4px; } }
+
+/* Small-screen layout: keep controls usable from 320px without changing desktop layout. */
+@media (max-width: 550px) {
+  html, body, #root { max-width: 100%; overflow-x: clip; }
+  body { min-width: 320px; }
+  img, svg, canvas { max-width: 100%; }
+
+  .topbar {
+    height: auto;
+    min-height: 64px;
+    padding: 9px 14px;
+    align-items: center;
+  }
+  .location { min-width: 0; gap: 7px; }
+  .location > span { font-size: 1.1rem; }
+  .location small { font-size: .56rem; }
+  .location strong { max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar-actions { min-width: 0; gap: 5px; }
+  .location-menu summary { font-size: .7rem; white-space: nowrap; }
+  .location-menu[open] .location-consent {
+    position: fixed;
+    top: 70px;
+    right: 12px;
+    width: calc(100vw - 24px);
+    max-width: 360px;
+  }
+  .osm-attribution { display: none; }
+
+  .page { gap: 16px; padding: 22px 14px 96px; }
+  .page-header { gap: 12px; }
+  .page-header > * { width: 100%; }
+  .page-header h1 { font-size: clamp(1.55rem, 8vw, 2rem); }
+  .page-header p { font-size: .84rem; line-height: 1.45; }
+  .dashboard-ask { width: 100%; }
+  .card { padding: 16px; border-radius: 13px; min-width: 0; }
+  .card-heading { gap: 9px; }
+  .card-heading > * { min-width: 0; }
+  .card-heading h2 { overflow-wrap: anywhere; }
+  .text-link { max-width: 42%; overflow: hidden; text-overflow: ellipsis; }
+
+  .mobile-nav {
+    justify-content: flex-start;
+    gap: 2px;
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 7px max(8px, env(safe-area-inset-left)) calc(7px + env(safe-area-inset-bottom));
+    scrollbar-width: none;
+  }
+  .mobile-nav::-webkit-scrollbar { display: none; }
+  .mobile-nav a {
+    flex: 0 0 58px;
+    min-width: 58px;
+    padding: 2px 3px;
+    border-radius: 8px;
+    font-size: 1rem;
+  }
+  .mobile-nav a.active { color: #1f7048; background: #eaf4e8; }
+  .mobile-nav small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .five-answers { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .five-answers > div { min-height: 100px; padding: 12px 10px; }
+  .five-answers > div:last-child { grid-column: span 2; }
+  .five-answers span { font-size: 1.45rem; }
+  .five-answers strong { font-size: .88rem; }
+  .five-answers a { font-size: .72rem; }
+  .dashboard-grid, .content-grid, .risk-grid { gap: 12px; }
+  .stat-card { gap: 9px; }
+  .stat-card h2 { font-size: 1.35rem; }
+  .weather-main { gap: 10px; }
+  .weather-main strong { font-size: 2.8rem; }
+  .weather-metrics { gap: 6px; }
+  .weather-metrics span { min-width: 0; grid-template-columns: 14px minmax(0, 1fr); }
+  .weather-metrics small, .weather-metrics strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .forecast-item { grid-template-columns: 48px 27px minmax(0, 1fr) 45px; padding: 10px 4px; }
+  .forecast-item span:nth-child(3), .forecast-item span:last-child { min-width: 0; }
+  .forecast-item span:last-child { font-size: .7rem; }
+
+  .recommendation-card, .alert-card, .crop-health-report { padding: 12px; }
+  .recommendation-card > div, .alert-card, .crop-health-report { min-width: 0; overflow-wrap: anywhere; }
+  .recommendation-card ul { padding-left: 18px; }
+  .crop-health-report-heading { flex-direction: column; gap: 5px; }
+  .crop-health-sources { padding-left: 17px; }
+
+  .farm-form, .crop-health-form { gap: 13px; }
+  .form-row, .profile-details, .farm-summary-details dl { grid-template-columns: 1fr; }
+  .symptom-grid { grid-template-columns: 1fr; }
+  .farm-location-setup, .farm-location-editor { padding: 13px; }
+  .location-actions > *, .location-picker-options .secondary-button { flex: 1 1 140px; }
+  .location-search-controls .secondary-button { width: 100%; }
+  .location-search-results button span { white-space: normal; overflow-wrap: anywhere; }
+  .farm-location-map { min-height: 240px; height: 48vh; }
+
+  .chat-thread { min-height: 360px; padding: 14px; }
+  .chat-welcome { max-width: 100%; }
+  .chat-welcome h2 { font-size: 1.25rem; }
+  .message { max-width: 100%; padding: 11px 12px; overflow-wrap: anywhere; }
+  .chat-composer { padding: 10px; }
+  .chat-composer > div { align-items: stretch; }
+  .chat-composer > div .primary-button, .chat-composer > div .secondary-button { flex: 1 1 0; padding-inline: 10px; }
+  .language-select { width: 100%; }
+
+  .auth-intro { min-height: 190px; padding: 32px 24px; }
+  .auth-intro h1 { font-size: 2.25rem; }
+  .auth-card { width: calc(100% - 32px); padding: 28px 0 36px; }
+}
