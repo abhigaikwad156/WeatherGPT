@@ -18,8 +18,14 @@ class WeatherCache:
         self.ttl_seconds = ttl_seconds
 
     def get(self, farm_id: UUID) -> NormalizedWeather | None:
+        return self._get(f"weather:{farm_id}")
+
+    def get_stale(self, farm_id: UUID) -> NormalizedWeather | None:
+        return self._get(f"weather:stale:{farm_id}")
+
+    def _get(self, key: str) -> NormalizedWeather | None:
         try:
-            raw = self.redis.get(f"weather:{farm_id}")
+            raw = self.redis.get(key)
         except RedisError:
             return None
         if raw is None:
@@ -47,11 +53,17 @@ class WeatherCache:
         )
 
     def set(self, weather: NormalizedWeather) -> None:
+        payload = json.dumps(asdict(weather), default=_json_default)
         try:
             self.redis.setex(
                 f"weather:{weather.farm_id}",
                 self.ttl_seconds,
-                json.dumps(asdict(weather), default=_json_default),
+                payload,
+            )
+            self.redis.setex(
+                f"weather:stale:{weather.farm_id}",
+                self.ttl_seconds * 2,
+                payload,
             )
         except RedisError:
             return

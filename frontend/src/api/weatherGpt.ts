@@ -64,7 +64,7 @@ export const weatherGptApi = {
     }),
   useCurrentLocationForFarm: (farmId: string) =>
     request<FarmLocation>(`/farms/${farmId}/location/from-current`, { method: "POST" }),
-  getFarmWeather: (farmId: string) => request<FarmWeather>(`/farms/${farmId}/weather?refresh=true`),
+  getFarmWeather: (farmId: string) => request<FarmWeather>(`/farms/${farmId}/weather`),
   getFarmCrops: (farmId: string) => request<Crop[]>(`/farms/${farmId}/crops`),
   getCropHealthReports: () => request<CropHealthReport[]>("/crop-health/reports"),
   analyzeCropHealth: (payload: {

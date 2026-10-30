@@ -19,9 +19,9 @@ services:
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "30"
       - key: WEATHER_PROVIDER
-        value: open_meteo
-      - key: WEATHER_API_URL
-        value: https://api.open-meteo.com/v1/forecast
+        value: openweather
+      - key: OPENWEATHER_API_KEY
+        sync: false
       - key: WEATHER_API_TIMEOUT_SECONDS
         value: "5"
       - key: WEATHER_API_RETRIES

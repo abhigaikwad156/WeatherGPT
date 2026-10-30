@@ -1,13 +1,22 @@
 """Provider-independent weather service with caching and persistence."""
 
+from concurrent.futures import Future
+from threading import Lock
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.models import Farm, WeatherForecast, WeatherObservation
 from app.weather.alerts import generate_weather_alerts
 from app.weather.cache import WeatherCache
-from app.weather.providers import WeatherProvider
+from app.weather.providers import WeatherProvider, WeatherProviderError
 from app.weather.types import NormalizedWeather
+
+_IN_FLIGHT_LOCK = Lock()
+_IN_FLIGHT_REQUESTS: dict[
+    tuple[type[WeatherProvider], UUID, float, float], Future[NormalizedWeather]
+] = {}
 
 
 class WeatherService:
@@ -34,11 +43,39 @@ class WeatherService:
         return weather
 
     def _fetch_and_cache(self, farm: Farm) -> NormalizedWeather:
-        weather = self.provider.fetch(farm.id, float(farm.latitude), float(farm.longitude))
-        self._persist(farm, weather)
-        if self.cache:
-            self.cache.set(weather)
-        return weather
+        latitude = float(farm.latitude)
+        longitude = float(farm.longitude)
+        request_key = (type(self.provider), farm.id, latitude, longitude)
+        with _IN_FLIGHT_LOCK:
+            request = _IN_FLIGHT_REQUESTS.get(request_key)
+            is_request_owner = request is None
+            if request is None:
+                request = Future()
+                _IN_FLIGHT_REQUESTS[request_key] = request
+        if not is_request_owner:
+            return request.result()
+
+        try:
+            try:
+                weather = self.provider.fetch(farm.id, latitude, longitude)
+            except WeatherProviderError:
+                stale = self.cache.get_stale(farm.id) if self.cache else None
+                if stale is not None:
+                    request.set_result(stale)
+                    return stale
+                raise
+            self._persist(farm, weather)
+            if self.cache:
+                self.cache.set(weather)
+            request.set_result(weather)
+            return weather
+        except Exception as error:
+            request.set_exception(error)
+            raise
+        finally:
+            with _IN_FLIGHT_LOCK:
+                if _IN_FLIGHT_REQUESTS.get(request_key) is request:
+                    del _IN_FLIGHT_REQUESTS[request_key]
 
     def _persist(self, farm: Farm, weather: NormalizedWeather) -> None:
         if weather.current:

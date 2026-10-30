@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import joinedload
 
@@ -23,6 +23,7 @@ from app.services.recommendations import (
     create_decision_engine,
 )
 from app.weather.factory import build_cache, build_provider
+from app.weather.providers import WeatherProviderError
 from app.weather.service import WeatherService
 
 router = APIRouter(prefix="/dashboard")
@@ -45,9 +46,15 @@ def read_dashboard(user: CurrentUser, session: DatabaseSession) -> DashboardResp
         )
 
     settings = get_settings()
-    weather = WeatherService(
-        session, build_provider(settings), build_cache(settings)
-    ).get_weather(farm)
+    try:
+        weather = WeatherService(
+            session, build_provider(settings), build_cache(settings)
+        ).get_weather(farm)
+    except WeatherProviderError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Current farm weather is unavailable; dashboard data was not generated.",
+        ) from error
     now = datetime.now(UTC)
 
     crop = session.scalar(

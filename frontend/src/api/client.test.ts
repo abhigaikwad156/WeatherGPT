@@ -8,6 +8,7 @@ import {
   UNAUTHORIZED_EVENT
 } from "../auth/session";
 import { request } from "./client";
+import { weatherGptApi } from "./weatherGpt";
 
 beforeEach(() => {
   localStorage.clear();
@@ -38,4 +39,15 @@ test("does not return a previous session's response after logout", async () => {
   resolveResponse?.(new Response(JSON.stringify({ private_name: "Previous user" }), { status: 200 }));
 
   await expect(pending).rejects.toBeInstanceOf(SessionChangedError);
+});
+
+test("uses the server weather cache for normal farm-weather reads", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 200 })));
+
+  await weatherGptApi.getFarmWeather("farm-id");
+
+  expect(fetch).toHaveBeenCalledWith(
+    "/api/v1/farms/farm-id/weather",
+    expect.objectContaining({ cache: "no-store" })
+  );
 });

@@ -72,7 +72,7 @@ test("shows deterministic decisions and evidence", async () => {
     farms: [{
       farmId: "farm-1",
       farmName: "North field",
-      weatherProvider: "Open-Meteo",
+      weatherProvider: "openweather",
       weatherFetchedAt: "2026-05-20T10:00:00Z",
       status: "available",
       recommendations: [{
@@ -103,7 +103,7 @@ test("shows missing-input details when no rule can produce a decision", async ()
     farms: [{
       farmId: "farm-1",
       farmName: "North field",
-      weatherProvider: "Open-Meteo",
+      weatherProvider: "openweather",
       weatherFetchedAt: "2026-05-20T10:00:00Z",
       status: "insufficient_data",
       recommendations: [{

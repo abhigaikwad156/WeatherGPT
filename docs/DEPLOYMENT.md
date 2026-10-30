@@ -23,7 +23,7 @@ weather-provider code, and AI/RAG safeguards. No credentials belong in this repo
   promise.
 - Free Neon and Upstash plans have usage limits. Monitor their dashboards. The current RAG schema
   stores 1536-dimension vectors, so document ingestion can consume the 1 GB free database limit.
-- Open-Meteo has no API key in the current implementation. Nominatim requires a deployment-specific
+- OpenWeather requires an API key from the deployment owner. Nominatim requires a deployment-specific
   identifying user agent with a monitored contact method. Follow each provider's usage policy.
 
 ## 1. Provision data services
@@ -85,8 +85,8 @@ only in the dashboard, never committed or pasted into chat.
 | `REDIS_URL` | **secret**: Upstash TCP `rediss://` URL |
 | `JWT_SECRET_KEY` | **secret**: a new random value of at least 32 characters |
 | `CORS_ORIGINS` | JSON list with the exact Vercel origin, e.g. `["https://your-project.vercel.app"]` |
-| `WEATHER_PROVIDER` | `open_meteo` |
-| `WEATHER_API_URL` | `https://api.open-meteo.com/v1/forecast` |
+| `WEATHER_PROVIDER` | `openweather` |
+| `OPENWEATHER_API_KEY` | **secret**: an active OpenWeather API key controlled by the project owner |
 | `WEATHER_API_TIMEOUT_SECONDS` | `5` |
 | `WEATHER_API_RETRIES` | `2` |
 | `WEATHER_CACHE_TTL_SECONDS` | `300` |
@@ -100,9 +100,12 @@ only in the dashboard, never committed or pasted into chat.
 | `RAG_MINIMUM_SCORE` | a previously calibrated, positive score |
 | `RAG_TRUSTED_PUBLISHERS` | JSON list of approved sources, e.g. `["publisher.example"]` — use real reviewed publishers only |
 
-Do **not** set `WEATHER_API_KEY` for `open_meteo`; it is used only with `WEATHER_PROVIDER=external`.
-If you select `external`, set a vendor-specific `WEATHER_API_URL` and **secret** `WEATHER_API_KEY`
-and verify that its response matches the application's normalized provider contract.
+The OpenWeather provider calls `https://api.openweathermap.org/data/2.5/weather` and
+`https://api.openweathermap.org/data/2.5/forecast` with `units=metric`. The free forecast supplies
+up to 5 days at 3-hour intervals; the API does not claim a 7-day forecast or invent unavailable
+precipitation probabilities. If you select `external`, set a vendor-specific `WEATHER_API_URL` and
+**secret** `WEATHER_API_KEY` and verify that its response matches the application's normalized
+provider contract.
 
 The start command runs `alembic upgrade head` before the web server. It only applies forward
 migrations and does not call a downgrade or delete existing data. Before applying it to any existing
@@ -157,7 +160,7 @@ need explicit origins.
 2. Register a new disposable verification account, then sign out and sign back in.
 3. Create a farm and crop, then ensure the farm list remains scoped to that account.
 4. Load farm weather and confirm a provider response is shown. This exercises API → Redis →
-   Open-Meteo and database persistence.
+   OpenWeather and database persistence.
 5. Submit a crop-health report. Run an AI/RAG request only after trusted content has been ingested
    and its calibrated safeguards are configured; do not treat an empty or unreviewed corpus as a
    successful AI verification.

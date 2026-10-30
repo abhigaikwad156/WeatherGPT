@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.schemas.weather import WeatherResponse
 from app.services.profiles import get_owned_farm
 from app.weather.factory import build_cache, build_provider
+from app.weather.providers import WeatherProviderError
 from app.weather.service import WeatherService
 
 router = APIRouter(prefix="/farms")
@@ -26,10 +27,16 @@ def read_farm_weather(
     if farm is None:
         raise HTTPException(status_code=404, detail="Farm not found")
     settings = get_settings()
-    weather = WeatherService(
-        session,
-        build_provider(settings),
-        build_cache(settings),
-    ).get_weather(farm, refresh=refresh)
+    try:
+        weather = WeatherService(
+            session,
+            build_provider(settings),
+            build_cache(settings),
+        ).get_weather(farm, refresh=refresh)
+    except WeatherProviderError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Current farm weather is unavailable.",
+        ) from error
     session.commit()
     return WeatherResponse.model_validate(asdict(weather))

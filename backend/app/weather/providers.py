@@ -1,8 +1,11 @@
 """Weather provider interface and adapters."""
 
+import logging
+from collections import Counter, defaultdict
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from typing import Protocol
+from urllib.parse import quote, quote_plus
 from uuid import UUID
 
 import httpx
@@ -22,6 +25,22 @@ class WeatherProvider(Protocol):
 
 def _number(value: object) -> float | None:
     return float(value) if value is not None else None
+
+
+class _ApiKeyLogFilter(logging.Filter):
+    def __init__(self, api_key: str) -> None:
+        super().__init__()
+        self.api_key = api_key
+        self.encoded_keys = (api_key, quote(api_key, safe=""), quote_plus(api_key, safe=""))
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        for key in self.encoded_keys:
+            message = message.replace(key, "[REDACTED]")
+        if message != record.getMessage():
+            record.msg = message
+            record.args = ()
+        return True
 
 
 class ExternalWeatherProvider:
@@ -111,158 +130,185 @@ class ExternalWeatherProvider:
         )
 
 
-class OpenMeteoWeatherProvider:
-    """Adapter for the free Open-Meteo forecast API."""
+class OpenWeatherProvider:
+    """Adapter for OpenWeather current conditions and 5-day forecast APIs."""
+
+    BASE_URL = "https://api.openweathermap.org"
+    CURRENT_PATH = "/data/2.5/weather"
+    FORECAST_PATH = "/data/2.5/forecast"
 
     def __init__(self, settings: Settings, client: httpx.Client | None = None) -> None:
-        if not settings.weather_api_url:
-            raise WeatherProviderError("WEATHER_API_URL is required for the Open-Meteo provider")
+        if not settings.openweather_api_key:
+            raise WeatherProviderError(
+                "OPENWEATHER_API_KEY is required for the OpenWeather provider"
+            )
+        for logger_name in ("httpx", "httpcore"):
+            logger = logging.getLogger(logger_name)
+            if not any(
+                isinstance(log_filter, _ApiKeyLogFilter)
+                and log_filter.api_key == settings.openweather_api_key
+                for log_filter in logger.filters
+            ):
+                logger.addFilter(_ApiKeyLogFilter(settings.openweather_api_key))
         self.settings = settings
         self.client = client or httpx.Client(timeout=settings.weather_api_timeout_seconds)
 
     def fetch(self, farm_id: UUID, latitude: float, longitude: float) -> NormalizedWeather:
-        last_error: Exception | None = None
         params = {
-            "latitude": latitude,
-            "longitude": longitude,
-            "timezone": "UTC",
-            "current": (
-                "temperature_2m,relative_humidity_2m,precipitation,"
-                "wind_speed_10m,weather_code"
-            ),
-            "hourly": (
-                "temperature_2m,relative_humidity_2m,precipitation,"
-                "wind_speed_10m,weather_code"
-            ),
-            "forecast_days": 7,
-            "daily": (
-                "temperature_2m_min,temperature_2m_max,precipitation_sum,"
-                "precipitation_probability_max,weather_code"
-            ),
+            "lat": latitude,
+            "lon": longitude,
+            "appid": self.settings.openweather_api_key,
+            "units": "metric",
         }
-        for attempt in range(self.settings.weather_api_retries + 1):
-            try:
-                response = self.client.get(
-                    self.settings.weather_api_url,
-                    params=params,
-                )
-                response.raise_for_status()
-                return self._normalize(farm_id, response.json())
-            except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
-                last_error = error
-                if attempt < self.settings.weather_api_retries:
-                    continue
-        raise WeatherProviderError("Open-Meteo weather request failed") from last_error
-
-    def _normalize(self, farm_id: UUID, payload: Mapping[str, object]) -> NormalizedWeather:
         try:
-            current_payload = payload["current"]
-            hourly_payload = payload["hourly"]
-            daily_payload = payload["daily"]
+            current_payload = self._request_json(self.CURRENT_PATH, params)
+            forecast_payload = self._request_json(self.FORECAST_PATH, params)
             current = self._current_item(current_payload)
-            hourly = self._series(hourly_payload)
-            daily = self._daily_series(daily_payload)
+            hourly, daily = self._forecast_series(forecast_payload)
             return NormalizedWeather(
                 farm_id=farm_id,
-                provider="open-meteo",
+                provider="openweather",
                 fetched_at=datetime.now(UTC),
                 current=current,
                 hourly=hourly,
                 daily=daily,
                 severe=(),
             )
-        except (KeyError, TypeError, ValueError, IndexError) as error:
-            raise WeatherProviderError("Open-Meteo response has an invalid schema") from error
+        except (KeyError, TypeError, ValueError, OverflowError, OSError) as error:
+            raise WeatherProviderError("OpenWeather response has an invalid schema") from error
+
+    def _request_json(self, path: str, params: dict[str, object]) -> Mapping[str, object]:
+        last_error: Exception | None = None
+        for attempt in range(self.settings.weather_api_retries + 1):
+            try:
+                response = self.client.get(f"{self.BASE_URL}{path}", params=params)
+                response.raise_for_status()
+                payload = response.json()
+                if not isinstance(payload, Mapping):
+                    raise ValueError("Weather response must be an object")
+                return payload
+            except httpx.HTTPStatusError as error:
+                last_error = error
+                if error.response.status_code == 429 or error.response.status_code < 500:
+                    break
+            except (httpx.HTTPError, ValueError) as error:
+                last_error = error
+            if attempt < self.settings.weather_api_retries:
+                continue
+        raise WeatherProviderError("OpenWeather request failed") from last_error
 
     @classmethod
-    def _current_item(cls, payload: object) -> HourlyWeather:
-        data = payload if isinstance(payload, Mapping) else {}
+    def _current_item(cls, payload: Mapping[str, object]) -> HourlyWeather:
+        main = cls._mapping(payload.get("main"))
+        rain = cls._mapping(payload.get("rain"))
+        wind = cls._mapping(payload.get("wind"))
         return HourlyWeather(
-            observed_at=cls._timestamp(data["time"]),
-            temperature_celsius=_number(data.get("temperature_2m")),
-            humidity_percent=_number(data.get("relative_humidity_2m")),
-            rainfall_mm=_number(data.get("precipitation")),
-            wind_speed_kph=_number(data.get("wind_speed_10m")),
-            condition=cls._condition(data.get("weather_code")),
+            observed_at=cls._timestamp(payload["dt"]),
+            temperature_celsius=_number(main.get("temp")),
+            humidity_percent=_number(main.get("humidity")),
+            rainfall_mm=_number(rain.get("1h", rain.get("3h"))),
+            wind_speed_kph=cls._wind_speed(wind.get("speed")),
+            condition=cls._condition(payload.get("weather")),
         )
 
     @classmethod
-    def _series(cls, payload: object) -> tuple[HourlyWeather, ...]:
-        data = payload if isinstance(payload, Mapping) else {}
-        times = cls._list(data["time"])
-        temperatures = cls._list(data.get("temperature_2m"))
-        humidity = cls._list(data.get("relative_humidity_2m"))
-        rainfall = cls._list(data.get("precipitation"))
-        wind = cls._list(data.get("wind_speed_10m"))
-        codes = cls._list(data.get("weather_code"))
-        return tuple(
-            HourlyWeather(
-                observed_at=cls._timestamp(time),
-                temperature_celsius=_number(cls._at(temperatures, index)),
-                humidity_percent=_number(cls._at(humidity, index)),
-                rainfall_mm=_number(cls._at(rainfall, index)),
-                wind_speed_kph=_number(cls._at(wind, index)),
-                condition=cls._condition(cls._at(codes, index)),
-            )
-            for index, time in enumerate(times)
+    def _forecast_series(
+        cls, payload: Mapping[str, object]
+    ) -> tuple[tuple[HourlyWeather, ...], tuple[DailyWeather, ...]]:
+        forecast = payload.get("list")
+        if not isinstance(forecast, list):
+            raise ValueError("Forecast response has no forecast list")
+        city = cls._mapping(payload.get("city"))
+        offset_seconds = int(_number(city.get("timezone")) or 0)
+        local_timezone = timezone(timedelta(seconds=offset_seconds))
+        hourly = tuple(
+            cls._forecast_item(item)
+            for item in sorted(forecast, key=lambda item: cls._timestamp(cls._mapping(item)["dt"]))
+        )
+        by_day: dict[date, list[Mapping[str, object]]] = defaultdict(list)
+        for item in forecast:
+            data = cls._mapping(item)
+            by_day[cls._timestamp(data["dt"]).astimezone(local_timezone).date()].append(data)
+        daily = tuple(
+            cls._daily_item(day, items, local_timezone)
+            for day, items in sorted(by_day.items())[:5]
+        )
+        return hourly, daily
+
+    @classmethod
+    def _forecast_item(cls, item: object) -> HourlyWeather:
+        data = cls._mapping(item)
+        main = cls._mapping(data.get("main"))
+        rain = cls._mapping(data.get("rain"))
+        wind = cls._mapping(data.get("wind"))
+        return HourlyWeather(
+            observed_at=cls._timestamp(data["dt"]),
+            temperature_celsius=_number(main.get("temp")),
+            humidity_percent=_number(main.get("humidity")),
+            rainfall_mm=_number(rain.get("3h")),
+            wind_speed_kph=cls._wind_speed(wind.get("speed")),
+            condition=cls._condition(data.get("weather")),
         )
 
     @classmethod
-    def _daily_series(cls, payload: object) -> tuple[DailyWeather, ...]:
-        data = payload if isinstance(payload, Mapping) else {}
-        dates = cls._list(data["time"])
-        minimum = cls._list(data.get("temperature_2m_min"))
-        maximum = cls._list(data.get("temperature_2m_max"))
-        precipitation = cls._list(data.get("precipitation_sum"))
-        probability = cls._list(data.get("precipitation_probability_max"))
-        codes = cls._list(data.get("weather_code"))
-        return tuple(
-            DailyWeather(
-                forecast_for=cls._timestamp(date),
-                temperature_min_celsius=_number(cls._at(minimum, index)),
-                temperature_max_celsius=_number(cls._at(maximum, index)),
-                precipitation_mm=_number(cls._at(precipitation, index)),
-                rain_probability_percent=_number(cls._at(probability, index)),
-                condition=cls._condition(cls._at(codes, index)),
-            )
-            for index, date in enumerate(dates)
+    def _daily_item(
+        cls,
+        day: date,
+        items: list[Mapping[str, object]],
+        local_timezone: timezone,
+    ) -> DailyWeather:
+        temperatures_min: list[float] = []
+        temperatures_max: list[float] = []
+        rainfall: list[float] = []
+        probabilities: list[float] = []
+        conditions: list[str] = []
+        for item in items:
+            main = cls._mapping(item.get("main"))
+            rain = cls._mapping(item.get("rain"))
+            minimum = _number(main.get("temp_min"))
+            maximum = _number(main.get("temp_max"))
+            amount = _number(rain.get("3h"))
+            probability = _number(item.get("pop"))
+            if minimum is not None:
+                temperatures_min.append(minimum)
+            if maximum is not None:
+                temperatures_max.append(maximum)
+            if amount is not None:
+                rainfall.append(amount)
+            if probability is not None:
+                probabilities.append(probability * 100)
+            condition = cls._condition(item.get("weather"))
+            if condition:
+                conditions.append(condition)
+        return DailyWeather(
+            forecast_for=datetime.combine(day, time.min, tzinfo=local_timezone),
+            temperature_min_celsius=min(temperatures_min) if temperatures_min else None,
+            temperature_max_celsius=max(temperatures_max) if temperatures_max else None,
+            precipitation_mm=sum(rainfall) if rainfall else None,
+            rain_probability_percent=max(probabilities) if probabilities else None,
+            condition=Counter(conditions).most_common(1)[0][0] if conditions else None,
         )
 
     @staticmethod
-    def _list(value: object) -> list[object]:
-        return value if isinstance(value, list) else []
-
-    @staticmethod
-    def _at(values: list[object], index: int) -> object | None:
-        return values[index] if index < len(values) else None
+    def _mapping(value: object) -> Mapping[str, object]:
+        return value if isinstance(value, Mapping) else {}
 
     @staticmethod
     def _timestamp(value: object) -> datetime:
-        text = str(value)
-        if len(text) == 10:
-            text = f"{text}T00:00:00"
-        return datetime.fromisoformat(text).replace(tzinfo=UTC)
+        return datetime.fromtimestamp(float(value), UTC)
 
     @staticmethod
-    def _condition(code: object) -> str | None:
-        if code is None:
+    def _wind_speed(value: object) -> float | None:
+        speed_meters_per_second = _number(value)
+        return speed_meters_per_second * 3.6 if speed_meters_per_second is not None else None
+
+    @staticmethod
+    def _condition(value: object) -> str | None:
+        weather = value[0] if isinstance(value, list) and value else None
+        description = OpenWeatherProvider._mapping(weather).get("description")
+        if description is None:
             return None
-        weather_code = int(code)
-        if weather_code == 0:
-            return "clear sky"
-        if weather_code in (1, 2, 3):
-            return "partly cloudy"
-        if weather_code in (45, 48):
-            return "fog"
-        if weather_code in (51, 53, 55, 56, 57):
-            return "drizzle"
-        if weather_code in (61, 63, 65, 66, 67, 80, 81, 82):
-            return "rain"
-        if weather_code in (71, 73, 75, 77, 85, 86):
-            return "snow"
-        if weather_code in (95, 96, 99):
-            return "thunderstorm"
-        return "unknown"
+        return str(description)
 
 
 class MockWeatherProvider:

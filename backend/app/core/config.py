@@ -31,9 +31,10 @@ class Settings(BaseSettings):
     ]
     database_url: str = "postgresql+psycopg://weathergpt:weathergpt@localhost:5432/weathergpt"
     redis_url: str = "redis://localhost:6379/0"
-    weather_provider: str = Field(default="mock", pattern="^(mock|external|open_meteo)$")
+    weather_provider: str = Field(default="mock", pattern="^(mock|external|openweather)$")
     weather_api_url: str | None = None
     weather_api_key: str | None = None
+    openweather_api_key: str | None = None
     weather_api_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
     weather_api_retries: int = Field(default=2, ge=0, le=5)
     weather_cache_ttl_seconds: int = Field(default=300, gt=0, le=86_400)

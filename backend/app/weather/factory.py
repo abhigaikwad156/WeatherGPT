@@ -7,7 +7,7 @@ from app.weather.cache import WeatherCache
 from app.weather.providers import (
     ExternalWeatherProvider,
     MockWeatherProvider,
-    OpenMeteoWeatherProvider,
+    OpenWeatherProvider,
     WeatherProvider,
 )
 
@@ -15,8 +15,8 @@ from app.weather.providers import (
 def build_provider(settings: Settings) -> WeatherProvider:
     if settings.weather_provider == "external":
         return ExternalWeatherProvider(settings)
-    if settings.weather_provider == "open_meteo":
-        return OpenMeteoWeatherProvider(settings)
+    if settings.weather_provider == "openweather":
+        return OpenWeatherProvider(settings)
     return MockWeatherProvider()
 
 

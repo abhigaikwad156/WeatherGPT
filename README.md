@@ -73,11 +73,12 @@ Unknown questions return guidance without fabricated weather data.
 
 ## Provider-independent weather service
 
-The weather service uses a `WeatherProvider` contract with `MockWeatherProvider` for local
-development/tests and `ExternalWeatherProvider` only when `WEATHER_PROVIDER=external` is
-configured. External requests require both `WEATHER_API_URL` and `WEATHER_API_KEY`, use the
-configured timeout and retry count, and must return the documented normalized JSON shape.
-No vendor-specific API integration is claimed by default.
+The weather service uses `MockWeatherProvider` for local development/tests and OpenWeather for
+live weather when `WEATHER_PROVIDER=openweather` is configured. Set `OPENWEATHER_API_KEY` as a
+secret. OpenWeather current conditions and its free 5-day, 3-hour forecast are normalized into
+the existing API contract; daily results are aggregated from available forecast intervals.
+`ExternalWeatherProvider` remains available when `WEATHER_PROVIDER=external` is explicitly
+configured and requires `WEATHER_API_URL` and `WEATHER_API_KEY`.
 
 `GET /api/v1/farms/{farm_id}/weather` returns normalized current, hourly, daily, and severe
 weather data for an owned farm. Responses are cached in Redis and useful current/daily data is

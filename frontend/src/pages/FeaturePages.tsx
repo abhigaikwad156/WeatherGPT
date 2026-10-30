@@ -150,7 +150,7 @@ export function WeatherPage() {
         observedAt: current.observed_at
       }
     : null;
-  return <div className="page"><header className="page-header"><div><p className="eyebrow">Open-Meteo</p><h1>Weather</h1><p>Current conditions and forecast for your first saved farm.</p></div></header>{state.loading && <LoadingState label="Loading live weather…" />}{state.error && <ErrorState message={state.error} retry={state.refresh} />}{weather && state.data && <div className="content-grid"><WeatherCard weather={weather} /><ForecastCard items={state.data.daily.map((item) => ({ forecastFor: item.forecast_for, temperatureMinCelsius: item.temperature_min_celsius, temperatureMaxCelsius: item.temperature_max_celsius, precipitationMm: item.precipitation_mm, rainProbabilityPercent: item.rain_probability_percent }))} /></div>}</div>;
+  return <div className="page"><header className="page-header"><div><p className="eyebrow">OpenWeather</p><h1>Weather</h1><p>Current conditions and forecast for your first saved farm.</p></div></header>{state.loading && <LoadingState label="Loading live weather…" />}{state.error && <ErrorState message={state.error} retry={state.refresh} />}{weather && state.data && <div className="content-grid"><WeatherCard weather={weather} /><ForecastCard items={state.data.daily.map((item) => ({ forecastFor: item.forecast_for, temperatureMinCelsius: item.temperature_min_celsius, temperatureMaxCelsius: item.temperature_max_celsius, precipitationMm: item.precipitation_mm, rainProbabilityPercent: item.rain_probability_percent }))} /></div>}</div>;
 }
 
 export function RecommendationsPage() {
