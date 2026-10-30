@@ -209,6 +209,7 @@ class OpenWeatherProvider:
             rainfall_mm=_number(rain.get("1h", rain.get("3h"))),
             wind_speed_kph=cls._wind_speed(wind.get("speed")),
             condition=cls._condition(payload.get("weather")),
+            pressure_hpa=_number(main.get("pressure")),
         )
 
     @classmethod
@@ -248,6 +249,7 @@ class OpenWeatherProvider:
             rainfall_mm=_number(rain.get("3h")),
             wind_speed_kph=cls._wind_speed(wind.get("speed")),
             condition=cls._condition(data.get("weather")),
+            pressure_hpa=_number(main.get("pressure")),
         )
 
     @classmethod

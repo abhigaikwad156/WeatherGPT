@@ -57,8 +57,12 @@ weather-provider code, and AI/RAG safeguards. No credentials belong in this repo
 ### Upstash Redis (free)
 
 1. Create a Redis database in a region close to Render.
-2. Copy the **TCP** connection string, which has the `rediss://` scheme. Set it as `REDIS_URL`.
-   The existing `redis` Python client accepts this URL and enables TLS from the scheme.
+2. Copy its REST URL and REST token from the Upstash console. Set them as
+   `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in Render. These are optional; if either
+   is absent, WeatherGPT uses its existing `REDIS_URL` cache only.
+3. Keep `REDIS_URL` set to the database's **TCP** `rediss://` connection string as the fallback
+   cache. If Upstash REST is unavailable, the backend tries this existing Redis cache, then
+   continues to the weather provider if that cache is also unavailable.
 
 ## 2. Deploy the FastAPI service on Render
 
@@ -82,7 +86,9 @@ only in the dashboard, never committed or pasted into chat.
 | `APP_ENV` | `production` |
 | `DEBUG` | `false` |
 | `DATABASE_URL` | **secret**: converted Neon pooled URL above |
-| `REDIS_URL` | **secret**: Upstash TCP `rediss://` URL |
+| `REDIS_URL` | **secret**: Upstash TCP `rediss://` URL (fallback cache) |
+| `UPSTASH_REDIS_REST_URL` | Optional: Upstash REST URL |
+| `UPSTASH_REDIS_REST_TOKEN` | Optional **secret**: Upstash REST token |
 | `JWT_SECRET_KEY` | **secret**: a new random value of at least 32 characters |
 | `CORS_ORIGINS` | JSON list with the exact Vercel origin, e.g. `["https://your-project.vercel.app"]` |
 | `WEATHER_PROVIDER` | `openweather` |

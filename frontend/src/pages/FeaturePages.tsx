@@ -144,9 +144,12 @@ export function WeatherPage() {
   const current = state.data?.current;
   const weather = current
     ? {
-        temperatureCelsius: current.temperature_celsius ?? 0,
-        condition: current.condition ?? "Unknown",
-        rainfallMm: current.rainfall_mm ?? 0,
+        temperatureCelsius: current.temperature_celsius,
+        condition: current.condition,
+        rainfallMm: current.rainfall_mm,
+        humidityPercent: current.humidity_percent,
+        windSpeedKph: current.wind_speed_kph,
+        pressureHpa: current.pressure_hpa,
         observedAt: current.observed_at
       }
     : null;

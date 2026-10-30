@@ -1,10 +1,13 @@
 export type AlertSeverity = "low" | "medium" | "high" | "critical";
 
 export interface WeatherSummary {
-  temperatureCelsius: number;
-  condition: string;
-  rainfallMm: number;
-  observedAt: string;
+  temperatureCelsius: number | null;
+  condition: string | null;
+  rainfallMm: number | null;
+  humidityPercent: number | null;
+  windSpeedKph: number | null;
+  pressureHpa: number | null;
+  observedAt: string | null;
 }
 
 export interface ForecastItem {
@@ -189,6 +192,7 @@ export interface FarmWeather {
     rainfall_mm: number | null;
     wind_speed_kph: number | null;
     condition: string | null;
+    pressure_hpa: number | null;
   } | null;
   hourly: Array<{
     observed_at: string;
@@ -197,6 +201,7 @@ export interface FarmWeather {
     rainfall_mm: number | null;
     wind_speed_kph: number | null;
     condition: string | null;
+    pressure_hpa: number | null;
   }>;
   daily: Array<{
     forecast_for: string;

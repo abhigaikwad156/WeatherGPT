@@ -10,6 +10,9 @@ class DashboardWeather(BaseModel):
     temperature_celsius: float | None = Field(serialization_alias="temperatureCelsius")
     condition: str | None
     rainfall_mm: float | None = Field(serialization_alias="rainfallMm")
+    humidity_percent: float | None = Field(serialization_alias="humidityPercent")
+    wind_speed_kph: float | None = Field(serialization_alias="windSpeedKph")
+    pressure_hpa: float | None = Field(serialization_alias="pressureHpa")
     observed_at: datetime | None = Field(serialization_alias="observedAt")
 
     model_config = ConfigDict(populate_by_name=True)

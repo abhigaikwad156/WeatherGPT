@@ -90,6 +90,9 @@ def read_dashboard(user: CurrentUser, session: DatabaseSession) -> DashboardResp
             temperature_celsius=weather.current.temperature_celsius if weather.current else None,
             condition=weather.current.condition if weather.current else None,
             rainfall_mm=weather.current.rainfall_mm if weather.current else None,
+            humidity_percent=weather.current.humidity_percent if weather.current else None,
+            wind_speed_kph=weather.current.wind_speed_kph if weather.current else None,
+            pressure_hpa=weather.current.pressure_hpa if weather.current else None,
             observed_at=weather.current.observed_at if weather.current else None,
         ),
         forecast=[

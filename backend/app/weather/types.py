@@ -13,6 +13,7 @@ class HourlyWeather:
     rainfall_mm: float | None
     wind_speed_kph: float | None
     condition: str | None
+    pressure_hpa: float | None = None
 
 
 @dataclass(frozen=True)

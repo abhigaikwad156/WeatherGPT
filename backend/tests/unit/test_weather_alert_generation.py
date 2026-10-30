@@ -175,7 +175,7 @@ def test_weather_service_generates_alerts_when_using_cached_weather(monkeypatch)
     calls: list[tuple[object, ...]] = []
 
     class Cache:
-        def get(self, _farm_id):
+        def get(self, _farm_id, _latitude, _longitude, _request_parameters):
             return weather
 
     class Provider:

@@ -109,7 +109,7 @@ def test_openweather_provider_maps_current_and_five_day_forecast(caplog) -> None
                 200,
                 json={
                     "dt": timestamp,
-                    "main": {"temp": 24, "humidity": 65},
+                    "main": {"temp": 24, "humidity": 65, "pressure": 1012},
                     "rain": {"1h": 1.2},
                     "wind": {"speed": 5},
                     "weather": [{"description": "light rain"}],
@@ -123,7 +123,13 @@ def test_openweather_provider_maps_current_and_five_day_forecast(caplog) -> None
                 "list": [
                     {
                         "dt": timestamp + 3600,
-                        "main": {"temp": 20, "temp_min": 12, "temp_max": 22, "humidity": 70},
+                        "main": {
+                            "temp": 20,
+                            "temp_min": 12,
+                            "temp_max": 22,
+                            "humidity": 70,
+                            "pressure": 1011,
+                        },
                         "rain": {"3h": 0.5},
                         "wind": {"speed": 2},
                         "pop": 0.25,
@@ -162,9 +168,11 @@ def test_openweather_provider_maps_current_and_five_day_forecast(caplog) -> None
     assert weather.current.humidity_percent == 65
     assert weather.current.rainfall_mm == 1.2
     assert weather.current.wind_speed_kph == 18
+    assert weather.current.pressure_hpa == 1012
     assert weather.current.condition == "light rain"
     assert len(weather.hourly) == 3
     assert weather.hourly[0].wind_speed_kph == 7.2
+    assert weather.hourly[0].pressure_hpa == 1011
     assert len(weather.daily) == 2
     assert weather.daily[0].forecast_for.isoformat() == "2026-01-02T00:00:00+05:30"
     assert weather.daily[0].temperature_min_celsius == 12

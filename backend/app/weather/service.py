@@ -1,5 +1,6 @@
 """Provider-independent weather service with caching and persistence."""
 
+import json
 from concurrent.futures import Future
 from threading import Lock
 from uuid import UUID
@@ -9,13 +10,13 @@ from sqlalchemy.orm import Session
 
 from app.domain.models import Farm, WeatherForecast, WeatherObservation
 from app.weather.alerts import generate_weather_alerts
-from app.weather.cache import WeatherCache
+from app.weather.cache import RequestParameters, WeatherCacheBackend
 from app.weather.providers import WeatherProvider, WeatherProviderError
 from app.weather.types import NormalizedWeather
 
 _IN_FLIGHT_LOCK = Lock()
 _IN_FLIGHT_REQUESTS: dict[
-    tuple[type[WeatherProvider], UUID, float, float], Future[NormalizedWeather]
+    tuple[type[WeatherProvider], UUID, float, float, str], Future[NormalizedWeather]
 ] = {}
 
 
@@ -24,28 +25,53 @@ class WeatherService:
         self,
         session: Session,
         provider: WeatherProvider,
-        cache: WeatherCache | None = None,
+        cache: WeatherCacheBackend | None = None,
     ) -> None:
         self.session = session
         self.provider = provider
         self.cache = cache
 
     def get_weather(self, farm: Farm, *, refresh: bool = False) -> NormalizedWeather:
+        latitude = float(farm.latitude)
+        longitude = float(farm.longitude)
+        request_parameters = self._request_parameters()
         if not refresh and self.cache:
-            cached = self.cache.get(farm.id)
+            cached = self.cache.get(farm.id, latitude, longitude, request_parameters)
             if cached is not None:
                 weather = cached
             else:
-                weather = self._fetch_and_cache(farm)
+                weather = self._fetch_and_cache(farm, request_parameters)
         else:
-            weather = self._fetch_and_cache(farm)
+            weather = self._fetch_and_cache(farm, request_parameters)
         generate_weather_alerts(self.session, farm.owner_id, farm, weather)
         return weather
 
-    def _fetch_and_cache(self, farm: Farm) -> NormalizedWeather:
+    def _request_parameters(self) -> RequestParameters:
+        provider_type = type(self.provider)
+        provider_settings = getattr(self.provider, "settings", None)
+        return {
+            "provider": f"{provider_type.__module__}.{provider_type.__qualname__}",
+            "base_url": str(
+                getattr(
+                    self.provider,
+                    "BASE_URL",
+                    getattr(provider_settings, "weather_api_url", ""),
+                )
+            ),
+            "current_endpoint": str(getattr(self.provider, "CURRENT_PATH", "")),
+            "forecast_endpoint": str(getattr(self.provider, "FORECAST_PATH", "")),
+            "units": "metric",
+        }
+
+    def _fetch_and_cache(
+        self,
+        farm: Farm,
+        request_parameters: RequestParameters,
+    ) -> NormalizedWeather:
         latitude = float(farm.latitude)
         longitude = float(farm.longitude)
-        request_key = (type(self.provider), farm.id, latitude, longitude)
+        request_scope = json.dumps(request_parameters, sort_keys=True, separators=(",", ":"))
+        request_key = (type(self.provider), farm.id, latitude, longitude, request_scope)
         with _IN_FLIGHT_LOCK:
             request = _IN_FLIGHT_REQUESTS.get(request_key)
             is_request_owner = request is None
@@ -59,14 +85,18 @@ class WeatherService:
             try:
                 weather = self.provider.fetch(farm.id, latitude, longitude)
             except WeatherProviderError:
-                stale = self.cache.get_stale(farm.id) if self.cache else None
+                stale = (
+                    self.cache.get_stale(farm.id, latitude, longitude, request_parameters)
+                    if self.cache
+                    else None
+                )
                 if stale is not None:
                     request.set_result(stale)
                     return stale
                 raise
             self._persist(farm, weather)
             if self.cache:
-                self.cache.set(weather)
+                self.cache.set(weather, latitude, longitude, request_parameters)
             request.set_result(weather)
             return weather
         except Exception as error:
