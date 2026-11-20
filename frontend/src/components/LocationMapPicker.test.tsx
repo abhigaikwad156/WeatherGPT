@@ -9,14 +9,26 @@ const mapState = vi.hoisted(() => ({
   click: undefined as
     | ((event: { latlng: { lat: number; lng: number } }) => void)
     | undefined,
+  initialCenter: undefined as [number, number] | undefined,
+  initialZoom: undefined as number | undefined,
   map: { flyTo: vi.fn(), getZoom: () => 5 }
 }));
 
 vi.mock("react-leaflet", async () => {
   const React = await import("react");
   return {
-    MapContainer: ({ children }: { children: ReactNode }) =>
-      React.createElement(
+    MapContainer: ({
+      children,
+      center,
+      zoom
+    }: {
+      children: ReactNode;
+      center: [number, number];
+      zoom: number;
+    }) => {
+      mapState.initialCenter = center;
+      mapState.initialZoom = zoom;
+      return React.createElement(
         "div",
         { "data-testid": "map" },
         React.createElement(
@@ -29,7 +41,8 @@ vi.mock("react-leaflet", async () => {
           "Select map point"
         ),
         children
-      ),
+      );
+    },
     Marker: ({ position }: { position: [number, number] }) =>
       React.createElement("span", { "data-testid": "map-marker" }, position.join(",")),
     TileLayer: () => null,
@@ -67,11 +80,20 @@ function renderPicker(props: {
 
 beforeEach(() => {
   mapState.click = undefined;
+  mapState.initialCenter = undefined;
+  mapState.initialZoom = undefined;
   vi.mocked(weatherGptApi.searchLocations).mockReset();
   vi.mocked(weatherGptApi.reverseGeocodeLocation).mockReset();
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+test("opens on Maharashtra when no farm location is selected", () => {
+  renderPicker();
+
+  expect(mapState.initialCenter).toEqual([19.7515, 75.7139]);
+  expect(mapState.initialZoom).toBe(6);
+});
 
 test("selects map coordinates and confirms them without GPS", () => {
   const onConfirm = vi.fn();

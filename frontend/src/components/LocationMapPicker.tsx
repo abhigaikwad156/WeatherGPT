@@ -15,6 +15,9 @@ import type { CurrentLocation, FarmLocation, GeocodedPlace } from "../api/types"
 import { weatherGptApi } from "../api/weatherGpt";
 import { LocationConsent } from "./LocationConsent";
 
+const MAHARASHTRA_CENTER: [number, number] = [19.7515, 75.7139];
+const MAHARASHTRA_ZOOM = 6;
+
 const farmMarkerIcon = new L.Icon({
   iconRetinaUrl: markerIconRetinaUrl,
   iconUrl: markerIconUrl,
@@ -219,8 +222,8 @@ export function LocationMapPicker({
 
       <MapContainer
         className="farm-location-map"
-        center={selected ? [selected.latitude, selected.longitude] : [20, 0]}
-        zoom={selected ? 12 : 2}
+        center={selected ? [selected.latitude, selected.longitude] : MAHARASHTRA_CENTER}
+        zoom={selected ? 12 : MAHARASHTRA_ZOOM}
         scrollWheelZoom={false}
         aria-label="Map for selecting farm location"
         whenReady={() => setMapReady(true)}

@@ -61,6 +61,10 @@ class Settings(BaseSettings):
             "mpkv.ac.in",
             "icar.org.in",
             "www.icar.org.in",
+            "icar.gov.in",
+            "www.icar.gov.in",
+            "agritech.tnau.ac.in",
+            "www.agritech.tnau.ac.in",
         ]
     )
     rag_web_max_download_bytes: int = Field(default=20 * 1024 * 1024, gt=0)

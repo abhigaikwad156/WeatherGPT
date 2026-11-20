@@ -3,6 +3,7 @@
 import ipaddress
 import re
 import socket
+from codecs import lookup
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlsplit
@@ -78,6 +79,10 @@ def fetch_web_document(
                     if len(content) > max_bytes:
                         raise ValueError("Document exceeds the configured download-size limit")
                 payload = bytes(content)
+                if mime_type in {"text/html", "application/xhtml+xml"}:
+                    payload = _normalize_html_encoding(
+                        payload, response.headers.get("content-type", "")
+                    )
                 _validate_format(payload, mime_type)
                 return WebDocument(payload, mime_type)
     except httpx.HTTPError as error:
@@ -149,3 +154,23 @@ def _validate_format(content: bytes, mime_type: str) -> None:
         raise ValueError("HTML document must use UTF-8 encoding") from error
     if not re.search(r"<\s*/?\s*[a-zA-Z][^>]*>", html):
         raise ValueError("HTML content type does not match the document format")
+
+
+def _normalize_html_encoding(content: bytes, content_type: str) -> bytes:
+    charset_match = re.search(r"charset\s*=\s*[\"']?([\w.-]+)", content_type, re.IGNORECASE)
+    if not charset_match:
+        header = content[:4096].decode("ascii", errors="ignore")
+        charset_match = re.search(
+            r"<meta\b[^>]*\bcharset\s*=\s*[\"']?([\w.-]+)",
+            header,
+            re.IGNORECASE,
+        )
+    charset = charset_match.group(1) if charset_match else "utf-8"
+    try:
+        encoding = lookup(charset)
+        return content.decode(encoding.name).encode("utf-8")
+    except (LookupError, UnicodeDecodeError) as error:
+        label = "UTF-8" if charset.lower() == "utf-8" else charset
+        raise ValueError(
+            f"HTML document must use a supported, valid {label} encoding"
+        ) from error

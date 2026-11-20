@@ -503,6 +503,29 @@ def test_web_ingestion_rejects_unsupported_document_formats(
         )
 
 
+def test_web_ingestion_normalizes_declared_legacy_html_charset() -> None:
+    import httpx
+
+    content = b'<html><head><meta charset="iso-8859-1"></head><body>caf\xe9</body></html>'
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200, headers={"content-type": "text/html"}, content=content
+            )
+        )
+    )
+
+    document = fetch_web_document(
+        "https://docs.example/document",
+        ["docs.example"],
+        1024,
+        client=client,
+        resolver=lambda _host, _port: ["8.8.8.8"],
+    )
+
+    assert extract_text(document.content, document.mime_type) == "café"
+
+
 def test_web_ingestion_rejects_unsafe_redirects() -> None:
     import httpx
 
