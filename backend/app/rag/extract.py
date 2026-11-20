@@ -11,9 +11,19 @@ class _TextParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.parts: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in {"script", "style", "noscript"}:
+            self._ignored_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style", "noscript"} and self._ignored_depth:
+            self._ignored_depth -= 1
 
     def handle_data(self, data: str) -> None:
-        self.parts.append(data)
+        if not self._ignored_depth:
+            self.parts.append(data)
 
 
 def extract_text(content: bytes, mime_type: str) -> str:

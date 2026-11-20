@@ -31,10 +31,11 @@ def chunk_document(
             tail: list[str] = []
             tail_length = 0
             for previous in reversed(current):
-                if tail_length + len(previous) + 1 > overlap:
+                candidate_length = tail_length + len(previous) + (1 if tail else 0)
+                if candidate_length > overlap:
                     break
                 tail.insert(0, previous)
-                tail_length += len(previous) + 1
+                tail_length = candidate_length
             current = tail
             length = tail_length
         current.append(word)

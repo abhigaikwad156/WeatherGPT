@@ -242,15 +242,17 @@ export interface ChatMessage {
       confidence: number;
       reasons: string[];
       deterministic: boolean;
-      citations: Array<Record<string, unknown>>;
+      citations: ChatSource[];
     };
-    knowledgeSources?: Array<{
-      source_id?: string;
-      title?: string;
-      publisher?: string;
-      source_uri?: string | null;
-    }>;
+    knowledgeSources?: ChatSource[];
   };
+}
+
+export interface ChatSource {
+  source_id?: string;
+  title?: string;
+  publisher?: string;
+  source_uri?: string | null;
 }
 
 export interface ChatResponse {

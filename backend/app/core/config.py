@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.6-flash"
     rag_embedding_model: str = "gemini-embedding-001"
     rag_embedding_dimension: int = Field(default=1536, ge=1)
-    rag_minimum_score: float = Field(default=0.0, ge=-1.0, le=1.0)
+    rag_minimum_score: float = Field(default=0.55, ge=-1.0, le=1.0)
     rag_trusted_publishers: list[str] = Field(default_factory=list)
     agricultural_thresholds_path: Path | None = None
 
@@ -59,6 +59,14 @@ class Settings(BaseSettings):
                 "CORS_ORIGINS must list explicit origins; wildcard origins are not allowed"
             )
         return origins
+
+    @field_validator("database_url")
+    @classmethod
+    def use_installed_postgres_driver(cls, value: str) -> str:
+        for scheme in ("postgres://", "postgresql://"):
+            if value.startswith(scheme):
+                return "postgresql+psycopg://" + value[len(scheme) :]
+        return value
 
     @field_validator("agricultural_thresholds_path", mode="before")
     @classmethod

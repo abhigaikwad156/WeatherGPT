@@ -29,7 +29,7 @@ class GeminiChatService:
     def __init__(self, settings: Settings, client: httpx.Client | None = None) -> None:
         self.api_key = settings.gemini_api_key
         self.model = settings.gemini_model
-        self.client = client or httpx.Client(timeout=20)
+        self.client = client or httpx.Client(timeout=60)
 
     def respond(self, question: str, language: str, verified_context: str) -> str:
         if not self.api_key:
@@ -76,10 +76,15 @@ class GeminiChatService:
                         "text": (
                             "You are WeatherGPT, a practical agricultural assistant. "
                             "Reply in the user's requested language when possible. "
-                            "Use retrieved excerpts as evidence for specific agricultural "
-                            "recommendations. You may answer general educational questions and "
-                            "explain agricultural concepts without excerpts, but disclose that "
-                            "no verified source was retrieved. Without excerpts, do not state "
+                            "For every agricultural factual claim or recommendation, use only "
+                            "information explicitly present in the supplied excerpts or verified "
+                            "farm/weather context. Never add plausible but unstated practices, "
+                            "examples, locations, figures, causes, or steps. If excerpts do not "
+                            "cover part of the question, say so and do not fill the gap. Cite each "
+                            "substantive source-based claim using the exact supplied title and "
+                            "publisher. If no excerpts were retrieved, give a concise no-source "
+                            "fallback instead of answering the agricultural question. Without "
+                            "excerpts, do not state "
                             "crop-specific stage durations, rates, thresholds, treatment steps, "
                             "or symptom causes as verified facts. Never guess local rates, "
                             "chemical "

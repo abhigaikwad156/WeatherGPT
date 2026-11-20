@@ -78,6 +78,8 @@ class PgVectorChunkRepository(ChunkRepository):
             """
         )
         with self.engine.connect() as connection:
+            # The pgvector default (one probe) missed relevant vectors in this small index.
+            connection.execute(text("SET LOCAL ivfflat.probes = 10"))
             rows = connection.execute(statement, params).mappings().all()
         return [
             RetrievedChunk(

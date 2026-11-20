@@ -1,4 +1,5 @@
 from io import BytesIO
+from unittest.mock import MagicMock
 
 import pytest
 from pypdf import PdfWriter
@@ -8,6 +9,7 @@ from app.rag.chunking import chunk_document
 from app.rag.embeddings import GeminiEmbeddingProvider, HashEmbeddingProvider
 from app.rag.extract import extract_text
 from app.rag.ingestion import DocumentIngestionService
+from app.rag.postgres import PgVectorChunkRepository
 from app.rag.repository import InMemoryChunkRepository
 from app.rag.retrieval import RetrievalService
 from app.rag.types import AgriculturalDocument, RetrievalFilter, SourceMetadata
@@ -221,6 +223,16 @@ def test_pdf_extraction_rejects_empty_scanned_and_unsupported_documents() -> Non
         extract_text(b"unsupported", "application/octet-stream")
 
 
+def test_html_extraction_ignores_scripts_styles_and_noscript_content() -> None:
+    html = (
+        b"<html><head><title>Guide</title><script>tracking data</script>"
+        b"<style>hidden styles</style></head><body>Verified advice"
+        b"<noscript>fallback navigation</noscript></body></html>"
+    )
+
+    assert extract_text(html, "text/html") == "Guide Verified advice"
+
+
 def test_retrieval_filters_metadata_and_returns_source_context() -> None:
     repository = InMemoryChunkRepository()
     service = DocumentIngestionService(
@@ -262,6 +274,19 @@ def test_retrieval_reingest_replaces_existing_document_chunks() -> None:
     assert len(repository.chunks) == len(replacement) == 1
     assert repository.chunks[0].chunk_id == first[0].chunk_id
     assert repository.chunks[0].text == "Updated irrigation guide content."
+
+
+def test_pgvector_search_probes_all_ivfflat_lists() -> None:
+    engine = MagicMock()
+    connection = engine.connect.return_value.__enter__.return_value
+    connection.execute.return_value.mappings.return_value.all.return_value = []
+    repository = PgVectorChunkRepository(engine)
+
+    repository.search((0.0,) * 1536, 5)
+
+    assert str(connection.execute.call_args_list[0].args[0]) == (
+        "SET LOCAL ivfflat.probes = 10"
+    )
 
 
 def test_lexical_fallback_requires_topic_and_crop_overlap() -> None:

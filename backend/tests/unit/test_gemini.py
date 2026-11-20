@@ -12,10 +12,10 @@ def test_gemini_response_uses_key_and_returns_generated_text() -> None:
         assert request.headers["x-goog-api-key"] == "test-key"
         assert request.url.path.endswith("/models/gemini-3.6-flash:generateContent")
         prompt = json.loads(request.content)
-        assert "You may answer general educational questions" in (
+        assert "use only information explicitly present" in (
             prompt["system_instruction"]["parts"][0]["text"]
         )
-        assert "Use retrieved excerpts as evidence for specific agricultural recommendations" in (
+        assert "Never add plausible but unstated practices" in (
             prompt["system_instruction"]["parts"][0]["text"]
         )
         assert "do not state crop-specific stage durations" in (

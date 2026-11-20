@@ -110,11 +110,14 @@ def handle_message(
         else _agricultural_help() if agricultural_question and result is None
         else WeatherExplanationService().explain(result, request.language)
     )
-    # The saved assistant message must be Gemini's output.  Do not quietly
-    # substitute a rule-based answer when the configured AI provider fails.
-    explanation = GeminiChatService(get_settings()).respond(
-        request.content, request.language, fallback_explanation
-    )
+    if agricultural_result is not None and not agricultural_result.retrieved:
+        explanation = agricultural_result.explanation
+    elif knowledge_result is not None and not knowledge_result.citations:
+        explanation = _no_verified_source_fallback(request.language)
+    else:
+        explanation = GeminiChatService(get_settings()).respond(
+            request.content, request.language, fallback_explanation
+        )
     assistant_message = Message(
         conversation_id=conversation.id,
         role=MessageRole.ASSISTANT,
@@ -190,6 +193,24 @@ def _agricultural_help() -> str:
     return (
         "I can help with irrigation, spraying, sowing, and weather risk. "
         "Try a specific question such as 'Should I irrigate today?' or 'Is it safe to spray?'"
+    )
+
+
+def _no_verified_source_fallback(language: str) -> str:
+    language_code = language.split("-", maxsplit=1)[0].casefold()
+    if language_code == "mr":
+        return (
+            "या प्रश्नासाठी संबंधित सत्यापित कृषी स्रोत सापडला नाही, "
+            "त्यामुळे मी स्रोताधारित उत्तर देऊ शकत नाही."
+        )
+    if language_code == "hi":
+        return (
+            "इस प्रश्न के लिए कोई संबंधित सत्यापित कृषि स्रोत नहीं मिला, "
+            "इसलिए मैं स्रोत-आधारित उत्तर नहीं दे सकता।"
+        )
+    return (
+        "I couldn't find a relevant verified agricultural source for this question, "
+        "so I can't provide a source-grounded answer."
     )
 
 

@@ -2,6 +2,8 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.agriculture.engine import AgriculturalDecisionEngine
 from app.agriculture.thresholds import (
@@ -268,6 +270,87 @@ def test_general_agriculture_question_without_farm_uses_rag_and_returns_citation
         intent="UNKNOWN", knowledge_sources=result.citations
     ).model_dump(by_alias=True)
     assert response_metadata["knowledgeSources"][0]["source_id"] == "icar-sugarcane-stages"
+
+
+def test_general_agriculture_question_without_sources_returns_fallback_without_gemini(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeSession:
+        def __init__(self) -> None:
+            self.items: list[object] = []
+
+        def add(self, item: object) -> None:
+            self.items.append(item)
+
+        def flush(self) -> None:
+            for item in self.items:
+                if isinstance(item, (Conversation, Message)) and item.id is None:
+                    item.id = uuid4()
+
+    class NoFarmPipeline:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def answer(self, *_args: object, **_kwargs: object) -> None:
+            raise ValueError("No owned farm is available")
+
+    class UnexpectedGemini:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            raise AssertionError("Gemini must not answer without retrieved sources")
+
+    monkeypatch.setattr(conversation_service, "AgriculturalChatPipeline", NoFarmPipeline)
+    monkeypatch.setattr(
+        conversation_service,
+        "_retrieval_service",
+        lambda _session: RetrievalService(InMemoryChunkRepository(), HashEmbeddingProvider()),
+    )
+    monkeypatch.setattr(conversation_service, "GeminiChatService", UnexpectedGemini)
+    monkeypatch.setattr(conversation_service.WeatherTool, "run", lambda *_args: None)
+
+    _conversation, message, _intent, result = conversation_service.handle_message(
+        FakeSession(),
+        USER_ID,
+        ConversationMessageRequest(content="What are the stages of sugarcane?", language="en"),
+    )
+
+    assert message.content == (
+        "I couldn't find a relevant verified agricultural source for this question, "
+        "so I can't provide a source-grounded answer."
+    )
+    assert result.citations == []
+
+
+def test_conversation_route_returns_service_unavailable_for_database_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeSession:
+        rolled_back = False
+
+        def rollback(self) -> None:
+            self.rolled_back = True
+
+    session = FakeSession()
+
+    def fail_with_database_error(*_args: object) -> None:
+        raise SQLAlchemyError("database unavailable")
+
+    monkeypatch.setattr(conversation_route, "handle_message", fail_with_database_error)
+
+    with pytest.raises(HTTPException) as error:
+        conversation_route.send_message(
+            ConversationMessageRequest(content="What are sugarcane stages?", language="en"),
+            User(
+                id=USER_ID,
+                email="farmer@example.com",
+                password_hash="unused",
+                display_name="Farmer",
+                is_active=True,
+            ),
+            session,
+        )
+
+    assert error.value.status_code == 503
+    assert session.rolled_back
 
 
 def test_conversation_route_serializes_general_agriculture_citations(

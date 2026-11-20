@@ -24,6 +24,22 @@ def test_settings_rejects_rag_dimension_that_does_not_match_pgvector() -> None:
         Settings(rag_embedding_dimension=768)
 
 
+def test_settings_uses_a_relevance_threshold_for_rag() -> None:
+    assert Settings(jwt_secret_key="x" * 32).rag_minimum_score == 0.55
+
+
+@pytest.mark.parametrize("scheme", ("postgres://", "postgresql://"))
+def test_settings_uses_installed_psycopg_driver(scheme: str) -> None:
+    settings = Settings(
+        database_url=f"{scheme}user:password@db.example/weathergpt",
+        jwt_secret_key="x" * 32,
+    )
+
+    assert settings.database_url == (
+        "postgresql+psycopg://user:password@db.example/weathergpt"
+    )
+
+
 def test_settings_treats_blank_threshold_path_as_unset() -> None:
     assert Settings(agricultural_thresholds_path="").agricultural_thresholds_path is None
 
@@ -35,6 +51,7 @@ def test_production_requires_calibrated_rag_and_trusted_publishers() -> None:
             jwt_secret_key="x" * 32,
             gemini_api_key="test-key",
             rag_trusted_publishers=["Approved Department"],
+            rag_minimum_score=0,
         )
 
 

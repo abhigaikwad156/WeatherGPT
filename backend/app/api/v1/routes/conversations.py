@@ -1,6 +1,7 @@
 """Conversational weather API."""
 
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.dependencies import CurrentUser, DatabaseSession
 from app.conversation.agricultural_pipeline import AgriculturalPipelineResult
@@ -29,12 +30,18 @@ def send_message(
 ) -> ConversationResponse:
     try:
         conversation, message, intent, result = handle_message(session, user.id, request)
+        session.commit()
+        session.refresh(message)
     except ConversationNotFoundError:
         raise HTTPException(status_code=404, detail="Conversation not found") from None
     except GeminiError as error:
+        session.rollback()
         raise HTTPException(status_code=502, detail=str(error)) from error
-    session.commit()
-    session.refresh(message)
+    except SQLAlchemyError as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=503, detail="The database is temporarily unavailable."
+        ) from error
     agricultural_result = result if isinstance(result, AgriculturalPipelineResult) else None
     knowledge_result = result if isinstance(result, AgriculturalKnowledgeResult) else None
     weather_result = result if not agricultural_result and not knowledge_result else None
