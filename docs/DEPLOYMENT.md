@@ -101,10 +101,16 @@ only in the dashboard, never committed or pasted into chat.
 | `NOMINATIM_TIMEOUT_SECONDS` | `5` |
 | `GEMINI_API_KEY` | **secret**: an active key controlled by the project owner |
 | `GEMINI_MODEL` | the reviewed model name available to that key |
+| `EMBEDDING_PROVIDER` | `gemini` (default), `alibaba`, or `cohere`; use one provider consistently for ingestion and retrieval |
 | `RAG_EMBEDDING_MODEL` | the reviewed embedding model that emits 1536 dimensions |
 | `RAG_EMBEDDING_DIMENSION` | `1536` |
+| `DASHSCOPE_API_KEY` | **secret**: Alibaba Cloud Model Studio API key; required with `EMBEDDING_PROVIDER=alibaba` |
+| `DASHSCOPE_BASE_URL` | HTTPS OpenAI-compatible Model Studio endpoint for the API key's workspace and region |
+| `COHERE_API_KEY` | **secret**: Cohere API key; required with `EMBEDDING_PROVIDER=cohere` (`embed-v4.0`, 1536 dimensions) |
 | `RAG_MINIMUM_SCORE` | a previously calibrated, positive score |
 | `RAG_TRUSTED_PUBLISHERS` | JSON list of approved sources, e.g. `["publisher.example"]` — use real reviewed publishers only |
+| `RAG_TRUSTED_DOMAINS` | JSON list of exact HTTPS source hosts; defaults to the explicit hosts used by the initial ICAR/MPKV sources |
+| `RAG_WEB_MAX_DOWNLOAD_BYTES` | `20971520` (20 MiB) maximum for each URL download |
 
 The OpenWeather provider calls `https://api.openweathermap.org/data/2.5/weather` and
 `https://api.openweathermap.org/data/2.5/forecast` with `units=metric`. The free forecast supplies

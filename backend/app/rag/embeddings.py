@@ -7,12 +7,17 @@ import threading
 import time
 from collections.abc import Sequence
 from typing import Protocol
+from urllib.parse import urlsplit
 
 import httpx
+
+from app.core.config import Settings
 
 
 class EmbeddingProvider(Protocol):
     dimension: int
+    provider_name: str
+    model_name: str
 
     def embed(
         self, text: str, *, task_type: str = "RETRIEVAL_QUERY"
@@ -25,6 +30,9 @@ class HashEmbeddingProvider:
 
     This is not a semantic model and must not be presented as production retrieval quality.
     """
+
+    provider_name = "hash"
+    model_name = "hash-test"
 
     def __init__(self, dimension: int = 64) -> None:
         self.dimension = dimension
@@ -41,6 +49,7 @@ class HashEmbeddingProvider:
 class GeminiEmbeddingProvider:
     """Gemini retrieval embeddings with dimensions compatible with pgvector."""
 
+    provider_name = "gemini"
     _endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent"
     _batch_endpoint = (
         "https://generativelanguage.googleapis.com/v1beta/models/{model}:batchEmbedContents"
@@ -63,6 +72,7 @@ class GeminiEmbeddingProvider:
             raise ValueError("embedding dimension must be positive")
         self.api_key = api_key
         self.model = model
+        self.model_name = model
         self.dimension = dimension
         self.client = client or httpx.Client(timeout=20)
 
@@ -204,6 +214,219 @@ class GeminiEmbeddingProvider:
                 if match:
                     return float(match.group(1))
         return 60.0
+
+
+class AlibabaEmbeddingProvider:
+    """Alibaba Cloud Model Studio text-embedding-v4 using its OpenAI-compatible API."""
+
+    provider_name = "alibaba"
+    model_name = "text-embedding-v4"
+    _batch_size = 16
+
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        dimension: int = 1536,
+        client: httpx.Client | None = None,
+    ) -> None:
+        if not api_key:
+            raise ValueError("DASHSCOPE_API_KEY is required for Alibaba embeddings")
+        if dimension != 1536:
+            raise ValueError("text-embedding-v4 must use the pgvector dimension of 1536")
+        parsed = urlsplit(base_url)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("DASHSCOPE_BASE_URL must be an HTTPS URL without credentials")
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.dimension = dimension
+        self.client = client or httpx.Client(timeout=30)
+
+    def embed(
+        self, text: str, *, task_type: str = "RETRIEVAL_QUERY"
+    ) -> tuple[float, ...]:
+        return self.embed_many([text], task_type=task_type)[0]
+
+    def embed_many(
+        self, texts: Sequence[str], *, task_type: str = "RETRIEVAL_DOCUMENT"
+    ) -> list[tuple[float, ...]]:
+        if task_type not in {"RETRIEVAL_QUERY", "RETRIEVAL_DOCUMENT"}:
+            raise ValueError("task_type must be RETRIEVAL_QUERY or RETRIEVAL_DOCUMENT")
+        if any(not item.strip() for item in texts):
+            raise ValueError("embedding text must not be empty")
+        embeddings: list[tuple[float, ...]] = []
+        for start in range(0, len(texts), self._batch_size):
+            batch = texts[start : start + self._batch_size]
+            try:
+                response = self.client.post(
+                    f"{self.base_url}/embeddings",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model_name,
+                        "input": list(batch),
+                        "dimensions": self.dimension,
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()["data"]
+                indices = [item["index"] for item in data]
+                if (
+                    len(indices) != len(batch)
+                    or not all(type(index) is int for index in indices)
+                    or sorted(indices) != list(range(len(batch)))
+                ):
+                    raise ValueError("Alibaba returned invalid embedding indices")
+                ordered = sorted(data, key=lambda item: item["index"])
+                batch_embeddings = [
+                    tuple(float(value) for value in item["embedding"]) for item in ordered
+                ]
+            except httpx.HTTPStatusError as error:
+                status_code = error.response.status_code
+                if status_code == 429:
+                    raise RuntimeError("Alibaba embedding quota exceeded") from error
+                raise RuntimeError(
+                    f"Alibaba embedding request failed with HTTP {status_code}"
+                ) from error
+            except httpx.HTTPError as error:
+                raise RuntimeError("Alibaba embedding request failed") from error
+            except (KeyError, TypeError, ValueError) as error:
+                raise RuntimeError("Alibaba returned an invalid embedding response") from error
+            if len(batch_embeddings) != len(batch):
+                raise RuntimeError(
+                    "Alibaba returned a different number of embeddings than requested"
+                )
+            if any(
+                len(embedding) != self.dimension
+                or not all(math.isfinite(value) for value in embedding)
+                for embedding in batch_embeddings
+            ):
+                raise RuntimeError(
+                    f"Alibaba embeddings must each contain {self.dimension} finite values"
+                )
+            embeddings.extend(batch_embeddings)
+        return embeddings
+
+
+class CohereEmbeddingProvider:
+    """Cohere Embed v4 using the official v2 Embed API."""
+
+    provider_name = "cohere"
+    model_name = "embed-v4.0"
+    _endpoint = "https://api.cohere.com/v2/embed"
+    _batch_size = 16
+    _task_types = {
+        "RETRIEVAL_QUERY": "search_query",
+        "RETRIEVAL_DOCUMENT": "search_document",
+    }
+
+    def __init__(
+        self,
+        api_key: str,
+        dimension: int = 1536,
+        client: httpx.Client | None = None,
+    ) -> None:
+        if not api_key:
+            raise ValueError("COHERE_API_KEY is required for Cohere embeddings")
+        if dimension != 1536:
+            raise ValueError("Cohere Embed v4 must use the pgvector dimension of 1536")
+        self.api_key = api_key
+        self.dimension = dimension
+        self.client = client or httpx.Client(timeout=30)
+
+    def embed(
+        self, text: str, *, task_type: str = "RETRIEVAL_QUERY"
+    ) -> tuple[float, ...]:
+        return self.embed_many([text], task_type=task_type)[0]
+
+    def embed_many(
+        self, texts: Sequence[str], *, task_type: str = "RETRIEVAL_DOCUMENT"
+    ) -> list[tuple[float, ...]]:
+        try:
+            input_type = self._task_types[task_type]
+        except KeyError as error:
+            raise ValueError("task_type must be RETRIEVAL_QUERY or RETRIEVAL_DOCUMENT") from error
+        if any(not text.strip() for text in texts):
+            raise ValueError("embedding text must not be empty")
+
+        embeddings: list[tuple[float, ...]] = []
+        for start in range(0, len(texts), self._batch_size):
+            batch = texts[start : start + self._batch_size]
+            try:
+                response = self.client.post(
+                    self._endpoint,
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json={
+                        "model": self.model_name,
+                        "texts": list(batch),
+                        "input_type": input_type,
+                        "embedding_types": ["float"],
+                        "output_dimension": self.dimension,
+                    },
+                )
+                response.raise_for_status()
+                vectors = response.json()["embeddings"]["float"]
+                batch_embeddings = [
+                    tuple(float(value) for value in vector) for vector in vectors
+                ]
+            except httpx.HTTPStatusError as error:
+                status_code = error.response.status_code
+                if status_code == 429:
+                    raise RuntimeError("Cohere embedding quota exceeded") from error
+                raise RuntimeError(
+                    f"Cohere embedding request failed with HTTP {status_code}"
+                ) from error
+            except httpx.HTTPError as error:
+                raise RuntimeError("Cohere embedding request failed") from error
+            except (KeyError, TypeError, ValueError) as error:
+                raise RuntimeError("Cohere returned an invalid embedding response") from error
+            if len(batch_embeddings) != len(batch):
+                raise RuntimeError(
+                    "Cohere returned a different number of embeddings than requested"
+                )
+            if any(
+                len(embedding) != self.dimension
+                or not all(math.isfinite(value) for value in embedding)
+                for embedding in batch_embeddings
+            ):
+                raise RuntimeError(
+                    f"Cohere embeddings must each contain {self.dimension} finite values"
+                )
+            embeddings.extend(batch_embeddings)
+        return embeddings
+
+
+def create_embedding_provider(settings: Settings) -> EmbeddingProvider | None:
+    """Create the configured embedding provider for both ingestion and query paths."""
+    provider_name = settings.embedding_provider
+    dimension = settings.rag_embedding_dimension
+    if provider_name == "alibaba":
+        return AlibabaEmbeddingProvider(
+            settings.dashscope_api_key or "",
+            settings.dashscope_base_url or "",
+            dimension,
+        )
+    if provider_name == "cohere":
+        return CohereEmbeddingProvider(settings.cohere_api_key or "", dimension)
+    if provider_name == "gemini":
+        api_key = settings.gemini_api_key
+        if not api_key:
+            return None
+        return GeminiEmbeddingProvider(
+            api_key,
+            settings.rag_embedding_model,
+            dimension,
+        )
+    raise ValueError(f"Unsupported embedding provider: {provider_name}")
 
 
 def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:

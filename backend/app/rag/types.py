@@ -16,6 +16,8 @@ class SourceMetadata:
     document_type: str = "guidance"
     trusted: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
+    embedding_provider: str | None = None
+    embedding_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -47,3 +49,5 @@ class RetrievalFilter:
     language: str | None = None
     publisher: str | None = None
     source_id: str | None = None
+    embedding_provider: str | None = None
+    embedding_model: str | None = None

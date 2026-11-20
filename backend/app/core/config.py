@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -47,8 +48,22 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.6-flash"
     rag_embedding_model: str = "gemini-embedding-001"
     rag_embedding_dimension: int = Field(default=1536, ge=1)
+    embedding_provider: Literal["gemini", "alibaba", "cohere"] = "gemini"
+    dashscope_api_key: str | None = None
+    dashscope_base_url: str | None = None
+    cohere_api_key: str | None = None
     rag_minimum_score: float = Field(default=0.55, ge=-1.0, le=1.0)
     rag_trusted_publishers: list[str] = Field(default_factory=list)
+    rag_trusted_domains: list[str] = Field(
+        default_factory=lambda: [
+            "nitiforstates.gov.in",
+            "www.nitiforstates.gov.in",
+            "mpkv.ac.in",
+            "icar.org.in",
+            "www.icar.org.in",
+        ]
+    )
+    rag_web_max_download_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
     agricultural_thresholds_path: Path | None = None
 
     @field_validator("cors_origins")
@@ -77,6 +92,15 @@ class Settings(BaseSettings):
     def validate_agricultural_runtime(self) -> "Settings":
         if self.rag_embedding_dimension != 1536:
             raise ValueError("RAG_EMBEDDING_DIMENSION must match pgvector's fixed 1536 dimensions")
+        if self.embedding_provider == "alibaba":
+            if not self.dashscope_api_key:
+                raise ValueError("DASHSCOPE_API_KEY is required when EMBEDDING_PROVIDER=alibaba")
+            if not self.dashscope_base_url:
+                raise ValueError(
+                    "DASHSCOPE_BASE_URL is required when EMBEDDING_PROVIDER=alibaba"
+                )
+        if self.embedding_provider == "cohere" and not self.cohere_api_key:
+            raise ValueError("COHERE_API_KEY is required when EMBEDDING_PROVIDER=cohere")
         if self.app_env == "production":
             if not self.gemini_api_key:
                 raise ValueError("GEMINI_API_KEY is required in production")

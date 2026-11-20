@@ -52,6 +52,14 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: EMBEDDING_PROVIDER
+        sync: false
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: DASHSCOPE_BASE_URL
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
       - key: GEMINI_MODEL
         sync: false
       - key: RAG_EMBEDDING_MODEL

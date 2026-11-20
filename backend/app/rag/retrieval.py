@@ -45,7 +45,17 @@ class RetrievalService:
                 type(error).__name__,
             )
             return self.repository.search_text(query, limit, filters)
-        results = self.repository.search(embedding, limit, filters)
+        provider_name = getattr(self.embedding_provider, "provider_name", None)
+        model_name = getattr(self.embedding_provider, "model_name", None)
+        embedding_filters = RetrievalFilter(
+            document_type=filters.document_type if filters else None,
+            language=filters.language if filters else None,
+            publisher=filters.publisher if filters else None,
+            source_id=filters.source_id if filters else None,
+            embedding_provider=provider_name,
+            embedding_model=model_name,
+        )
+        results = self.repository.search(embedding, limit, embedding_filters)
         score_floor = self.minimum_score if minimum_score is None else minimum_score
         if not -1.0 <= score_floor <= 1.0:
             raise ValueError("minimum_score must be between -1 and 1")

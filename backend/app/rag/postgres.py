@@ -54,6 +54,38 @@ class PgVectorChunkRepository(ChunkRepository):
                 rows,
             )
 
+    def has_source_id(self, source_id: str) -> bool:
+        with self.engine.connect() as connection:
+            return bool(
+                connection.execute(
+                    text(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM agricultural_document_chunks
+                            WHERE metadata ->> 'source_id' = :source_id
+                        )
+                        """
+                    ),
+                    {"source_id": source_id},
+                ).scalar_one()
+            )
+
+    def source_uri_for_id(self, source_id: str) -> str | None:
+        with self.engine.connect() as connection:
+            return connection.execute(
+                text(
+                    """
+                    SELECT metadata ->> 'source_uri'
+                    FROM agricultural_document_chunks
+                    WHERE metadata ->> 'source_id' = :source_id
+                    ORDER BY ordinal
+                    LIMIT 1
+                    """
+                ),
+                {"source_id": source_id},
+            ).scalar_one_or_none()
+
     def search(
         self, embedding: tuple[float, ...], limit: int, filters: RetrievalFilter | None = None
     ) -> list[RetrievedChunk]:
@@ -62,10 +94,26 @@ class PgVectorChunkRepository(ChunkRepository):
             "embedding": "[" + ",".join(str(value) for value in embedding) + "]",
             "limit": limit,
         }
-        for field in ("document_type", "language", "publisher", "source_id"):
+        for field in (
+            "document_type",
+            "language",
+            "publisher",
+            "source_id",
+            "embedding_provider",
+            "embedding_model",
+        ):
             value = getattr(filters, field, None) if filters else None
             if value:
-                clauses.append(f"metadata ->> '{field}' = :{field}")
+                if field in {"embedding_provider", "embedding_model"}:
+                    clauses.append(
+                        f"COALESCE(metadata ->> '{field}', "
+                        f"{':legacy_' + field}) = :{field}"
+                    )
+                    params[f"legacy_{field}"] = (
+                        "gemini" if field == "embedding_provider" else "gemini-embedding-001"
+                    )
+                else:
+                    clauses.append(f"metadata ->> '{field}' = :{field}")
                 params[field] = value
         statement = text(
             f"""

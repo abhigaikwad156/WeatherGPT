@@ -32,6 +32,12 @@ class ChunkRepository:
     def add_many(self, chunks: Iterable[DocumentChunk]) -> None:
         raise NotImplementedError
 
+    def has_source_id(self, source_id: str) -> bool:
+        raise NotImplementedError
+
+    def source_uri_for_id(self, source_id: str) -> str | None:
+        raise NotImplementedError
+
     def search(
         self, embedding: tuple[float, ...], limit: int, filters: RetrievalFilter | None = None
     ) -> list[RetrievedChunk]:
@@ -53,6 +59,19 @@ class InMemoryChunkRepository(ChunkRepository):
         self.chunks = [chunk for chunk in self.chunks if chunk.document_id not in document_ids]
         self.chunks.extend(new_chunks)
 
+    def has_source_id(self, source_id: str) -> bool:
+        return any(chunk.metadata.source_id == source_id for chunk in self.chunks)
+
+    def source_uri_for_id(self, source_id: str) -> str | None:
+        return next(
+            (
+                chunk.metadata.source_uri
+                for chunk in self.chunks
+                if chunk.metadata.source_id == source_id
+            ),
+            None,
+        )
+
     def search(
         self, embedding: tuple[float, ...], limit: int, filters: RetrievalFilter | None = None
     ) -> list[RetrievedChunk]:
@@ -64,6 +83,11 @@ class InMemoryChunkRepository(ChunkRepository):
                 or (filters.language and metadata.language != filters.language)
                 or (filters.publisher and metadata.publisher != filters.publisher)
                 or (filters.source_id and metadata.source_id != filters.source_id)
+                or (
+                    filters.embedding_provider
+                    and metadata.embedding_provider != filters.embedding_provider
+                )
+                or (filters.embedding_model and metadata.embedding_model != filters.embedding_model)
             ):
                 continue
             if chunk.embedding is not None:

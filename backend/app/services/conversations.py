@@ -20,7 +20,7 @@ from app.conversation.intents import WeatherIntent, detect_intent
 from app.conversation.weather_tool import WeatherResult, WeatherTool
 from app.core.config import get_settings
 from app.domain.models import Conversation, Message, MessageRole
-from app.rag.embeddings import GeminiEmbeddingProvider
+from app.rag.embeddings import create_embedding_provider
 from app.rag.postgres import PgVectorChunkRepository
 from app.rag.retrieval import RetrievalService
 from app.schemas.conversation import ConversationMessageRequest
@@ -172,15 +172,7 @@ def _retrieval_service(session: Session) -> RetrievalService:
     """Build the pgvector-backed RAG service with the migration's 1536 dimensions."""
     settings = get_settings()
     repository = PgVectorChunkRepository(session.get_bind())
-    embeddings = (
-        GeminiEmbeddingProvider(
-            settings.gemini_api_key,
-            settings.rag_embedding_model,
-            settings.rag_embedding_dimension,
-        )
-        if settings.gemini_api_key
-        else None
-    )
+    embeddings = create_embedding_provider(settings)
     return RetrievalService(repository, embeddings, settings.rag_minimum_score)
 
 
