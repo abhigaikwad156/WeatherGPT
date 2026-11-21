@@ -1,10 +1,82 @@
+import ast
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from sqlalchemy import CheckConstraint, Index, inspect
 
-from app.domain.models import Farm, User, UserCurrentLocation
+from app.domain.models import Farm, FarmerCrop, User, UserCurrentLocation
 from app.infrastructure.database import Base
+
+
+def _migration_columns(table_name: str) -> set[str]:
+    migration_directory = Path(__file__).parents[2] / "alembic" / "versions"
+    columns: set[str] = set()
+    for migration_file in migration_directory.glob("*.py"):
+        tree = ast.parse(migration_file.read_text(encoding="utf-8"))
+        timestamp_columns = {
+            argument.args[0].value
+            for definition in ast.walk(tree)
+            if isinstance(definition, ast.FunctionDef)
+            and definition.name == "timestamp_columns"
+            for argument in ast.walk(definition)
+            if isinstance(argument, ast.Call)
+            and isinstance(argument.func, ast.Attribute)
+            and argument.func.attr == "Column"
+            and argument.args
+            and isinstance(argument.args[0], ast.Constant)
+            and isinstance(argument.args[0].value, str)
+        }
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            if not node.args or not isinstance(node.args[0], ast.Constant):
+                continue
+            if node.args[0].value != table_name:
+                continue
+            if node.func.attr == "create_table":
+                column_arguments = node.args[1:]
+            elif node.func.attr == "add_column" and len(node.args) > 1:
+                column_arguments = node.args[1:2]
+            else:
+                continue
+            for argument in column_arguments:
+                if (
+                    isinstance(argument, ast.Starred)
+                    and isinstance(argument.value, ast.Call)
+                    and isinstance(argument.value.func, ast.Name)
+                    and argument.value.func.id == "timestamp_columns"
+                ):
+                    columns.update(timestamp_columns)
+                    continue
+                if (
+                    isinstance(argument, ast.Call)
+                    and isinstance(argument.func, ast.Attribute)
+                    and argument.func.attr == "Column"
+                    and argument.args
+                    and isinstance(argument.args[0], ast.Constant)
+                    and isinstance(argument.args[0].value, str)
+                ):
+                    columns.add(argument.args[0].value)
+    return columns
+
+
+@pytest.mark.parametrize(("table_name", "model"), [("farms", Farm), ("farmer_crops", FarmerCrop)])
+def test_farm_related_model_columns_are_created_by_migrations(
+    table_name: str, model: type[Farm] | type[FarmerCrop]
+) -> None:
+    assert _migration_columns(table_name) == set(model.__table__.columns.keys())
+
+
+def test_deployment_startup_applies_migrations_before_serving() -> None:
+    backend_directory = Path(__file__).parents[2]
+    startup_configs = (
+        backend_directory / "Dockerfile",
+        backend_directory.parents[0] / "render.yaml",
+    )
+
+    for path in startup_configs:
+        assert "alembic upgrade head && exec uvicorn" in path.read_text(encoding="utf-8")
 
 
 def test_all_expected_domain_tables_are_registered() -> None:

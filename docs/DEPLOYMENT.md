@@ -74,7 +74,7 @@ and point it at the repository, or create a Web Service manually with these exac
 | Runtime | Python 3.12 (`backend/.python-version`) |
 | Root directory | `backend` |
 | Build command | `pip install --upgrade pip && pip install .` |
-| Start command | `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Start command | `alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
 | Health check path | `/api/v1/health` |
 | Instance type | Free (for a demo) |
 
@@ -119,9 +119,12 @@ precipitation probabilities. If you select `external`, set a vendor-specific `WE
 **secret** `WEATHER_API_KEY` and verify that its response matches the application's normalized
 provider contract.
 
-The start command runs `alembic upgrade head` before the web server. It only applies forward
-migrations and does not call a downgrade or delete existing data. Before applying it to any existing
-database, review the pending migration with `alembic current` and `alembic history` from `backend`.
+The Render start command and the backend Docker image both run `alembic upgrade head` before
+starting Uvicorn. A migration failure prevents the web server from starting. Alembic only applies
+forward migrations here; the startup command does not downgrade or delete existing data. Revision
+`20261112_0009` adds nullable farm-input columns and `farmer_crops.last_irrigated_at`, preserving
+existing records. Before applying it to any existing database, review the pending migration with
+`alembic current` and `alembic history` from `backend`.
 
 After deployment, record the Render URL as `https://YOUR-API.onrender.com` and check:
 
@@ -130,6 +133,14 @@ Invoke-RestMethod https://YOUR-API.onrender.com/api/v1/health
 ```
 
 Expected result: `status` is `ok` and `environment` is `production`.
+
+After applying a schema migration, verify the revision in Neon (`20261112_0009` or later) and call
+the authenticated dashboard endpoint with a valid access token:
+
+```powershell
+Invoke-RestMethod -Headers @{ Authorization = "Bearer <access_token>" } `
+  https://YOUR-API.onrender.com/api/v1/dashboard
+```
 
 ## 3. Deploy the React SPA on Vercel
 
