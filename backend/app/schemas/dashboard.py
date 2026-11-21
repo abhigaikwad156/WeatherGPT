@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.recommendations import DecisionEvidence, DecisionSource
+
 
 class DashboardWeather(BaseModel):
     temperature_celsius: float | None = Field(serialization_alias="temperatureCelsius")
@@ -52,6 +54,22 @@ class DashboardRecommendation(BaseModel):
     summary: str
     decision_version: str = Field(serialization_alias="decisionVersion")
     decision: str | None = None
+    reasons: list[str] = Field(default_factory=list)
+    applicable_crop_stage: str | None = Field(
+        default=None, serialization_alias="applicableCropStage"
+    )
+    crop_age_days: int | None = Field(default=None, serialization_alias="cropAgeDays")
+    source: DecisionSource | None = None
+    evidence: list[DecisionEvidence] = Field(default_factory=list)
+    explanations: dict[str, str] = Field(default_factory=dict)
+    data_basis: str | None = Field(default=None, serialization_alias="dataBasis")
+    weather_limitations: list[str] = Field(
+        default_factory=list, serialization_alias="weatherLimitations"
+    )
+    schedule_interval_days: int | None = Field(
+        default=None, serialization_alias="scheduleIntervalDays"
+    )
+    missing_inputs: list[str] = Field(default_factory=list, serialization_alias="missingInputs")
 
     model_config = ConfigDict(populate_by_name=True)
 

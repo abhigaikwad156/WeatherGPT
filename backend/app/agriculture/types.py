@@ -1,7 +1,7 @@
 """Provider-neutral inputs and structured outputs for agricultural decisions."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -15,6 +15,8 @@ class DecisionType(StrEnum):
 
 
 class DecisionValue(StrEnum):
+    IRRIGATE = "IRRIGATE"
+    DO_NOT_IRRIGATE = "DO_NOT_IRRIGATE"
     APPLY = "APPLY"
     WAIT = "WAIT"
     SUITABLE = "SUITABLE"
@@ -48,6 +50,7 @@ class WeatherSnapshot:
 class AgriculturalInputs:
     crop: str | None = None
     growth_stage: str | None = None
+    crop_age_days: int | None = None
     soil_type: str | None = None
     irrigation_type: str | None = None
     region: str | None = None
@@ -58,8 +61,13 @@ class AgriculturalInputs:
     humidity_percent: float | None = None
     wind_speed_kph: float | None = None
     soil_moisture_percent: float | None = None
+    soil_moisture_measured_at: datetime | None = None
     soil_moisture_measurement_basis: str | None = None
     soil_moisture_sensor_depth_cm: float | None = None
+    last_irrigated_at: date | None = None
+    irrigation_layout: str | None = None
+    irrigation_configuration: dict[str, object] | None = None
+    evaluation_time: datetime | None = None
     historical_weather: tuple[WeatherSnapshot, ...] = ()
     forecast_weather: tuple[WeatherSnapshot, ...] = ()
 
@@ -75,6 +83,7 @@ class Decision:
     ml_prediction: dict[str, Any] | None = None
     llm_explanation: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    explanations: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not 0 <= self.confidence <= 1:

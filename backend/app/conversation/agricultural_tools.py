@@ -1,6 +1,6 @@
 """Database-backed tools used by the agricultural conversation pipeline."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, select
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.agriculture.types import WeatherSnapshot
 from app.conversation.agricultural_pipeline import FarmerContext, WeatherContext
+from app.core.config import get_settings
 from app.domain.models import Crop, Farm, FarmerCrop, User, WeatherForecast, WeatherObservation
 
 
@@ -40,15 +41,29 @@ class DatabaseFarmerContextTool:
         if row is None:
             return None
         farm, farmer_crop, crop_record, user = row
+        today = datetime.now(UTC).date()
         return FarmerContext(
             farm.id,
             farm.name,
-            user.location or f"{farm.latitude}, {farm.longitude}",
+            farm.location_name or user.location,
             farm.soil_type,
             farm.irrigation_type,
             float(farm.soil_moisture_percent) if farm.soil_moisture_percent is not None else None,
             crop_record.name if crop_record is not None else None,
             farmer_crop.growth_stage if farmer_crop is not None else None,
+            (
+                (datetime.now(UTC).date() - farmer_crop.planted_at).days
+                if farmer_crop is not None
+                and farmer_crop.planted_at is not None
+                and farmer_crop.planted_at <= today
+                else None
+            ),
+            farm.soil_moisture_measured_at,
+            farmer_crop.last_irrigated_at if farmer_crop is not None else None,
+            farm.irrigation_layout,
+            farm.irrigation_configuration,
+            farmer_crop.id if farmer_crop is not None else None,
+            farm.region,
         )
 
     def list_crops(self, user_id: UUID, farm_id: UUID | None) -> tuple[str, ...]:
@@ -75,6 +90,7 @@ class DatabaseWeatherContextTool:
         if forecast_horizon_days <= 0:
             raise ValueError("forecast_horizon_days must be positive")
         now = datetime.now(UTC)
+        max_age = timedelta(seconds=get_settings().weather_cache_ttl_seconds)
         observation = self.session.scalar(
             select(WeatherObservation)
             .where(WeatherObservation.farm_id == farm_id)
@@ -94,25 +110,52 @@ class DatabaseWeatherContextTool:
                 WeatherForecast.farm_id == farm_id,
                 WeatherForecast.forecast_for >= now,
                 WeatherForecast.forecast_for <= now + timedelta(days=forecast_horizon_days),
+                WeatherForecast.issued_at >= now - max_age,
+                WeatherForecast.issued_at <= now,
             )
             .order_by(WeatherForecast.forecast_for.asc())
         ).all()
+        forecast_by_date: dict[date, WeatherForecast] = {}
+        for item in forecasts:
+            forecast_date = item.forecast_for.date()
+            existing = forecast_by_date.get(forecast_date)
+            if existing is None or item.issued_at > existing.issued_at:
+                forecast_by_date[forecast_date] = item
+        expected_dates = {
+            (now + timedelta(days=offset)).date() for offset in range(1, forecast_horizon_days + 1)
+        }
+        complete_forecast = all(
+            day in forecast_by_date and forecast_by_date[day].precipitation_mm is not None
+            for day in expected_dates
+        )
+        rainfall_forecast = (
+            sum(float(forecast_by_date[day].precipitation_mm) for day in expected_dates)
+            if complete_forecast
+            else None
+        )
+        current_observation = (
+            observation
+            if observation
+            and observation.observed_at.tzinfo is not None
+            and now - max_age <= observation.observed_at <= now
+            else None
+        )
         return WeatherContext(
             recent_rainfall_mm=_sum_or_none(item.rainfall_mm for item in observations),
-            forecast_rainfall_mm=_sum_or_none(item.precipitation_mm for item in forecasts),
+            forecast_rainfall_mm=rainfall_forecast,
             temperature_celsius=(
-                float(observation.temperature_celsius)
-                if observation and observation.temperature_celsius is not None
+                float(current_observation.temperature_celsius)
+                if current_observation and current_observation.temperature_celsius is not None
                 else None
             ),
             humidity_percent=(
-                float(observation.humidity_percent)
-                if observation and observation.humidity_percent is not None
+                float(current_observation.humidity_percent)
+                if current_observation and current_observation.humidity_percent is not None
                 else None
             ),
             wind_speed_kph=(
-                float(observation.wind_speed_kph)
-                if observation and observation.wind_speed_kph is not None
+                float(current_observation.wind_speed_kph)
+                if current_observation and current_observation.wind_speed_kph is not None
                 else None
             ),
             forecast_horizon_days=forecast_horizon_days,
@@ -146,7 +189,8 @@ class DatabaseWeatherContextTool:
                     ),
                     condition=item.condition,
                 )
-                for item in forecasts
+                for item in forecast_by_date.values()
+                if item.forecast_for.date() in expected_dates
             ),
         )
 

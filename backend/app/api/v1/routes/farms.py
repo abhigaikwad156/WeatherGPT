@@ -52,6 +52,7 @@ def _crop_response(crop: FarmerCrop) -> CropResponse:
         variety=crop.variety,
         sowing_date=crop.planted_at,
         growth_stage=crop.growth_stage,
+        last_irrigated_at=crop.last_irrigated_at,
         is_active=crop.is_active,
     )
 

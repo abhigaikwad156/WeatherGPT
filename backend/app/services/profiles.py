@@ -34,6 +34,8 @@ def create_farm(session: Session, user_id: UUID, request: FarmCreate) -> Farm:
 
 def update_farm(farm: Farm, changes: FarmUpdate) -> Farm:
     values = changes.model_dump(exclude_unset=True)
+    if "soil_moisture_percent" in values and "soil_moisture_measured_at" not in values:
+        values["soil_moisture_measured_at"] = None
     for field, value in values.items():
         setattr(farm, field, value)
     if "latitude" in values or "longitude" in values:
@@ -54,6 +56,7 @@ def create_crop(session: Session, farm: Farm, user_id: UUID, request: CropCreate
         variety=request.variety,
         planted_at=request.sowing_date,
         growth_stage=request.growth_stage,
+        last_irrigated_at=request.last_irrigated_at,
     )
     session.add(farmer_crop)
     session.flush()

@@ -1,7 +1,7 @@
 """Tool-oriented orchestration for agricultural chatbot questions."""
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -50,9 +50,22 @@ class IntentEntityExtractor:
     # the selected farm (for example, "wheat" on a soybean farm) from silently
     # being evaluated as the farm's first crop.  Farm crops still take priority.
     _common_crops = (
-        "rice", "wheat", "maize", "corn", "soybean", "cotton", "sugarcane",
-        "chickpea", "gram", "pigeon pea", "tomato", "potato", "onion",
-        "groundnut", "millet", "sorghum",
+        "rice",
+        "wheat",
+        "maize",
+        "corn",
+        "soybean",
+        "cotton",
+        "sugarcane",
+        "chickpea",
+        "gram",
+        "pigeon pea",
+        "tomato",
+        "potato",
+        "onion",
+        "groundnut",
+        "millet",
+        "sorghum",
     )
 
     def extract(
@@ -80,8 +93,19 @@ class IntentEntityExtractor:
         if action is None and any(
             term in normalized
             for term in (
-                "crop", "farm", "field", "growing", "disease", "pest", "fertil",
-                "harvest", "yield", "पीक", "शेत", "फसल", "खेती",
+                "crop",
+                "farm",
+                "field",
+                "growing",
+                "disease",
+                "pest",
+                "fertil",
+                "harvest",
+                "yield",
+                "पीक",
+                "शेत",
+                "फसल",
+                "खेती",
             )
         ):
             action = DecisionType.CROP_WEATHER_COMPATIBILITY
@@ -107,6 +131,13 @@ class FarmerContext:
     soil_moisture_percent: float | None
     crop: str | None
     growth_stage: str | None
+    crop_age_days: int | None = None
+    soil_moisture_measured_at: datetime | None = None
+    last_irrigated_at: date | None = None
+    irrigation_layout: str | None = None
+    irrigation_configuration: dict[str, object] | None = None
+    farmer_crop_id: UUID | None = None
+    region: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,6 +188,19 @@ class GroundedExplanation:
         retrieved: list[RetrievedChunk],
         language: str,
     ) -> str:
+        if decision.decision_type == DecisionType.IRRIGATION and decision.explanations:
+            response_language = "mr" if language.casefold().startswith("mr") else "en"
+            explanation = decision.explanations.get(
+                response_language, decision.explanations.get("en", "")
+            )
+            if retrieved:
+                sources = ", ".join(item.chunk.metadata.title for item in retrieved[:3])
+                explanation += (
+                    " Retrieved agricultural evidence for context (not used to override "
+                    f"the deterministic decision): {sources}."
+                )
+            return explanation
+
         farm_details = ", ".join(
             f"{label}={value}"
             for label, value in (
@@ -204,9 +248,7 @@ class GroundedExplanation:
             ),
         )
         weather_details = ", ".join(
-            f"{label}={value}"
-            for label, value in weather_pairs
-            if value is not None
+            f"{label}={value}" for label, value in weather_pairs if value is not None
         )
         explanation = (
             f"Decision: {decision.decision.value}. Reasons: {'; '.join(decision.reasons)}."
@@ -304,9 +346,12 @@ class AgriculturalChatPipeline:
             AgriculturalInputs(
                 crop=farmer.crop,
                 growth_stage=farmer.growth_stage,
+                crop_age_days=farmer.crop_age_days,
                 soil_type=farmer.soil_type,
                 irrigation_type=farmer.irrigation_type,
-                region=farmer.location,
+                region=farmer.region,
+                irrigation_layout=farmer.irrigation_layout,
+                irrigation_configuration=farmer.irrigation_configuration,
             ),
             self.decision_engine.thresholds,
         )
@@ -323,9 +368,10 @@ class AgriculturalChatPipeline:
         agricultural_inputs = AgriculturalInputs(
             crop=farmer.crop,
             growth_stage=farmer.growth_stage,
+            crop_age_days=farmer.crop_age_days,
             soil_type=farmer.soil_type,
             irrigation_type=farmer.irrigation_type,
-            region=farmer.location,
+            region=farmer.region,
             recent_rainfall_mm=weather.recent_rainfall_mm,
             forecast_rainfall_mm=weather.forecast_rainfall_mm,
             forecast_horizon_days=weather.forecast_horizon_days,
@@ -333,6 +379,11 @@ class AgriculturalChatPipeline:
             humidity_percent=weather.humidity_percent,
             wind_speed_kph=weather.wind_speed_kph,
             soil_moisture_percent=farmer.soil_moisture_percent,
+            soil_moisture_measured_at=farmer.soil_moisture_measured_at,
+            last_irrigated_at=farmer.last_irrigated_at,
+            irrigation_layout=farmer.irrigation_layout,
+            irrigation_configuration=farmer.irrigation_configuration,
+            evaluation_time=datetime.now(UTC),
             historical_weather=weather.historical_weather,
             forecast_weather=weather.forecast_weather,
         )
@@ -377,6 +428,7 @@ class AgriculturalChatPipeline:
                 farmer.growth_stage,
                 farmer.soil_type,
                 farmer.irrigation_type,
+                farmer.region,
                 f"soil moisture {farmer.soil_moisture_percent} percent"
                 if farmer.soil_moisture_percent is not None
                 else None,

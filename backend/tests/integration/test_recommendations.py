@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -6,9 +6,18 @@ from fastapi.testclient import TestClient
 
 from app.agriculture.engine import AgriculturalDecisionEngine
 from app.agriculture.thresholds import AgriculturalThresholds
+from app.agriculture.types import WeatherSnapshot
 from app.api.dependencies import get_current_user, get_db_session
-from app.domain.models import Crop, Farm, FarmerCrop, User
+from app.domain.models import Crop, Farm, FarmerCrop, Recommendation, User
 from app.main import create_app
+from app.schemas.recommendations import (
+    DecisionRecommendation,
+    FarmRecommendations,
+)
+from app.services.recommendations import (
+    _complete_forecast_rainfall,
+    available_dashboard_recommendations,
+)
 from app.weather.providers import WeatherProviderError
 from app.weather.types import DailyWeather, HourlyWeather, NormalizedWeather, SevereWeather
 
@@ -22,14 +31,23 @@ class Result:
 
 
 class RecommendationSession:
-    def __init__(
-        self, user_id, farms: list[Farm], crops: list[FarmerCrop]
-    ) -> None:
+    def __init__(self, user_id, farms: list[Farm], crops: list[FarmerCrop]) -> None:
         self.user_id = user_id
         self.farms = farms
         self.crops = crops
         self.statements: list[str] = []
         self.committed = False
+        self.added: list[Recommendation] = []
+
+    def scalar(self, statement: object) -> object | None:
+        entity = statement.column_descriptions[0]["entity"]
+        if entity is Recommendation:
+            return self.added[-1] if self.added else None
+        return None
+
+    def add(self, item: object) -> None:
+        if isinstance(item, Recommendation):
+            self.added.append(item)
 
     def scalars(self, statement: object) -> Result:
         self.statements.append(str(statement))
@@ -42,9 +60,7 @@ class RecommendationSession:
                 for crop in self.crops
                 if crop.farmer_id == self.user_id
                 and any(
-                    farm.id == crop.farm_id
-                    for farm in self.farms
-                    if farm.owner_id == self.user_id
+                    farm.id == crop.farm_id for farm in self.farms if farm.owner_id == self.user_id
                 )
                 and crop.is_active
             ]
@@ -78,6 +94,143 @@ def _crop(user_id, farm: Farm) -> FarmerCrop:
     )
 
 
+def test_sugarcane_recommendation_returns_source_stage_and_missing_inputs(monkeypatch) -> None:
+    user_id = uuid4()
+    farm = _farm(user_id)
+    farm.soil_type = "Black Soil"
+    farm.irrigation_type = "Drip Irrigation"
+    farm.location_name = "Pune, Maharashtra"
+    farm.region = "Pune, Maharashtra"
+    crop = _crop(user_id, farm)
+    crop.crop.name = "Sugarcane"
+    crop.growth_stage = "tillering"
+    crop.planted_at = date.today() - timedelta(days=100)
+    client, session = _client(monkeypatch, user_id, [farm], [crop], {farm.id: _weather(farm)})
+
+    response = client.get("/api/v1/recommendations")
+
+    assert response.status_code == 200
+    irrigation = next(
+        item
+        for item in response.json()["farms"][0]["recommendations"]
+        if item["recommendationType"] == "irrigation"
+    )
+    assert irrigation["decision"] == "NEEDS_INPUT"
+    assert irrigation["cropAgeDays"] == 100
+    assert irrigation["applicableCropStage"] == "tillering"
+    assert irrigation["source"]["publisher"] == "Tamil Nadu Agricultural University (TNAU)"
+    assert "local_agronomist_review" in irrigation["missingInputs"]
+    assert "irrigation_layout" in irrigation["missingInputs"]
+    assert irrigation["evidence"][0]["source"]["sourceRegion"] == "Tamil Nadu"
+    assert irrigation["explanations"]["mr"].startswith("अधिक माहिती आवश्यक:")
+    assert len(session.added) == 1
+    persisted = session.added[0]
+    assert persisted.status.value == "needs_input"
+    assert persisted.details["applicable_crop_stage"] == "tillering"
+    assert persisted.details["source"]["publisher"] == "Tamil Nadu Agricultural University (TNAU)"
+
+
+def test_recommendation_api_upserts_irrigation_decision(monkeypatch) -> None:
+    user_id = uuid4()
+    farm = _farm(user_id)
+    farm.soil_type = "Black Soil"
+    farm.irrigation_type = "Drip"
+    farm.location_name = "Pune, Maharashtra"
+    farm.region = "Pune, Maharashtra"
+    crop = _crop(user_id, farm)
+    crop.crop.name = "Sugarcane"
+    crop.growth_stage = "maturity"
+    crop.planted_at = date.today() - timedelta(days=300)
+    client, session = _client(monkeypatch, user_id, [farm], [crop], {farm.id: _weather(farm)})
+
+    first = client.get("/api/v1/recommendations")
+    second = client.get("/api/v1/recommendations")
+
+    assert first.status_code == second.status_code == 200
+    assert len(session.added) == 1
+    assert session.added[0].details["decision"] == "NEEDS_INPUT"
+    assert session.added[0].decision_version == "irrigation-rules-v2"
+
+
+def test_recommendation_api_requests_missing_planting_date_and_growth_stage(monkeypatch) -> None:
+    user_id = uuid4()
+    farm = _farm(user_id)
+    farm.soil_type = "Black Soil"
+    farm.irrigation_type = "Drip"
+    farm.region = "Maharashtra"
+    crop = _crop(user_id, farm)
+    crop.crop.name = "Sugarcane"
+    crop.planted_at = None
+    crop.growth_stage = None
+    client, _ = _client(monkeypatch, user_id, [farm], [crop], {farm.id: _weather(farm)})
+
+    response = client.get("/api/v1/recommendations")
+
+    assert response.status_code == 200
+    irrigation = next(
+        item
+        for item in response.json()["farms"][0]["recommendations"]
+        if item["recommendationType"] == "irrigation"
+    )
+    assert irrigation["decision"] == "NEEDS_INPUT"
+    assert irrigation["cropAgeDays"] is None
+    assert irrigation["applicableCropStage"] is None
+    assert irrigation["missingInputs"] == ["crop_age_days", "growth_stage"]
+
+
+def test_dashboard_actions_include_irrigation_needs_input_decisions() -> None:
+    recommendation = DecisionRecommendation(
+        id="farm:crop:irrigation",
+        recommendation_type="irrigation",
+        crop_id=None,
+        crop_name="Sugarcane",
+        decision="NEEDS_INPUT",
+        risk_level="UNKNOWN",
+        confidence=0,
+        status="needs_input",
+        reasons=["Recorded growth stage and crop age are required"],
+        missing_inputs=["crop_age_days", "growth_stage"],
+        explanations={"en": "More inputs are required.", "mr": "अधिक माहिती आवश्यक."},
+        evidence=[],
+        weather_limitations=["Rainfall forecast is unavailable."],
+    )
+    farm = FarmRecommendations(
+        farm_id=uuid4(),
+        farm_name="Farm",
+        weather_provider="test",
+        weather_fetched_at=datetime.now(UTC),
+        status="insufficient_data",
+        recommendations=[recommendation],
+    )
+
+    actions = available_dashboard_recommendations([farm])
+
+    assert len(actions) == 1
+    assert actions[0]["decision"] == "NEEDS_INPUT"
+    assert actions[0]["missing_inputs"] == ["crop_age_days", "growth_stage"]
+    assert actions[0]["explanations"]["mr"] == "अधिक माहिती आवश्यक."
+    assert actions[0]["weather_limitations"] == ["Rainfall forecast is unavailable."]
+
+
+def test_partial_daily_forecast_does_not_produce_horizon_rainfall() -> None:
+    now = datetime(2026, 11, 21, 12, tzinfo=UTC)
+    forecasts = (
+        WeatherSnapshot(now + timedelta(days=1), rainfall_mm=2),
+        WeatherSnapshot(now + timedelta(days=2), rainfall_mm=3),
+    )
+
+    assert _complete_forecast_rainfall(forecasts, now=now, horizon_days=3) is None
+
+
+def test_complete_daily_forecast_sums_rainfall_for_configured_horizon() -> None:
+    now = datetime(2026, 11, 21, 12, tzinfo=UTC)
+    forecasts = tuple(
+        WeatherSnapshot(now + timedelta(days=day), rainfall_mm=day) for day in (1, 2, 3)
+    )
+
+    assert _complete_forecast_rainfall(forecasts, now=now, horizon_days=3) == 6
+
+
 def _weather(
     farm: Farm,
     *,
@@ -87,14 +240,8 @@ def _weather(
     forecast_rainfall: float | None = 2.0,
 ) -> NormalizedWeather:
     now = datetime.now(UTC)
-    current = (
-        HourlyWeather(now, 22.0, 60.0, 0.0, 5.0, "clear")
-        if current_available
-        else None
-    )
-    forecast = DailyWeather(
-        now + timedelta(days=1), 18.0, 25.0, forecast_rainfall, 20.0, "clear"
-    )
+    current = HourlyWeather(now, 22.0, 60.0, 0.0, 5.0, "clear") if current_available else None
+    forecast = DailyWeather(now + timedelta(days=1), 18.0, 25.0, forecast_rainfall, 20.0, "clear")
     events = (
         (
             SevereWeather(
@@ -170,7 +317,8 @@ def test_recommendations_returns_rule_triggered_severe_weather_decision(monkeypa
     body = response.json()
     assert body["status"] == "available"
     extreme = next(
-        item for item in body["farms"][0]["recommendations"]
+        item
+        for item in body["farms"][0]["recommendations"]
         if item["recommendationType"] == "extreme_weather"
     )
     assert extreme["decision"] == "HIGH_RISK"
@@ -226,11 +374,19 @@ def test_recommendations_missing_soil_moisture_returns_rule_reason(monkeypatch) 
                     "crop": "Wheat",
                     "soil_type": "loam",
                     "irrigation_type": "drip",
-                    "soil_moisture": {"sufficient_percent": 50},
-                    "forecast": {"rainfall_lookahead_mm": 10, "horizon_days": 3},
+                    "soil_moisture": {
+                        "sufficient_percent": 50,
+                        "measurement_basis": "test basis",
+                        "sensor_depth_cm": 30,
+                        "maximum_age_hours": 24,
+                    },
                     "source": {
                         "publisher": "Test source",
                         "document_title": "Reviewed test rule",
+                        "source_uri": "https://example.invalid/reviewed-test-rule",
+                        "page_or_section": "Test section",
+                        "source_region": "Pune",
+                        "review_status": "approved",
                         "reviewed_by": "Agronomist",
                     },
                 }
@@ -256,7 +412,8 @@ def test_recommendations_missing_soil_moisture_returns_rule_reason(monkeypatch) 
     )
     assert irrigation["status"] == "needs_input"
     assert irrigation["reasons"] == [
-        "Soil-moisture measurement is required for this irrigation profile"
+        "No current usable soil-moisture reading is available and this profile has no approved "
+        "fallback schedule"
     ]
 
 
@@ -400,6 +557,4 @@ def test_recommendations_do_not_assume_zero_rain_for_spraying(monkeypatch) -> No
     )
     assert spraying["decision"] == "NEEDS_INPUT"
     assert spraying["status"] == "needs_input"
-    assert spraying["reasons"] == [
-        "Forecast rainfall is required by the configured spraying rule"
-    ]
+    assert spraying["reasons"] == ["Forecast rainfall is required by the configured spraying rule"]

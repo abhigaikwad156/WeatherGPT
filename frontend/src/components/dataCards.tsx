@@ -24,12 +24,35 @@ export function AlertCard({ alert }: { alert: AlertItem }) {
 }
 
 export function RecommendationCard({ recommendation }: { recommendation: RecommendationItem }) {
-  const status = recommendation.decision
-    ? "Rule-based decision"
+  const status = recommendation.decision === "NEEDS_INPUT"
+    ? "Need more farm information"
+    : recommendation.decision
+      ? "Rule-based decision"
     : recommendation.status === "available"
       ? "Do this today"
       : recommendation.status === "needs_input"
         ? "Need more farm information"
         : "Not available yet";
-  return <article className={`recommendation-card recommendation-${recommendation.status}`}><span className="recommendation-check" aria-hidden="true">{recommendation.status === "available" ? "✓" : "!"}</span><div><p className="eyebrow">{recommendation.recommendationType}</p><h3>{recommendation.summary}</h3><strong className="recommendation-status">{status}</strong></div></article>;
+  const missingInputLabels: Record<string, string> = {
+    crop_age_days: "crop age (planting date)",
+    growth_stage: "recorded growth stage",
+    reviewed_soil_moisture_threshold: "agronomist-reviewed soil-moisture threshold",
+    reviewed_forecast_rainfall_threshold: "agronomist-reviewed forecast-rainfall threshold",
+    soil_moisture_percent: "soil-moisture reading",
+    soil_moisture_measured_at: "soil-moisture measurement time",
+    fresh_soil_moisture_measurement: "fresh soil-moisture reading",
+    forecast_rainfall_mm: "complete forecast rainfall data",
+    forecast_horizon_days: "matching forecast period",
+    local_agronomist_review: "Maharashtra agronomist review",
+    approved_irrigation_profile: "approved irrigation profile",
+    approved_irrigation_schedule: "approved irrigation schedule",
+    approved_irrigation_rule: "approved irrigation rule",
+    irrigation_layout: "drip irrigation layout",
+    last_irrigated_at: "last irrigation date",
+    reviewed_source: "current reviewed source"
+  };
+  const missingInputs = recommendation.missingInputs?.map(
+    (input) => missingInputLabels[input] ?? input.replaceAll("_", " ").replace("irrigation configuration.", "")
+  );
+  return <article className={`recommendation-card recommendation-${recommendation.status}`}><span className="recommendation-check" aria-hidden="true">{recommendation.status === "available" ? "✓" : "!"}</span><div><p className="eyebrow">{recommendation.recommendationType}</p><h3>{recommendation.summary}</h3><strong className="recommendation-status">{status}</strong>{recommendation.applicableCropStage && <p>Applicable crop stage: {recommendation.applicableCropStage}{recommendation.cropAgeDays != null ? ` · ${recommendation.cropAgeDays} days after planting` : ""}</p>}{recommendation.explanations?.en && <p>{recommendation.explanations.en}</p>}{recommendation.explanations?.mr && <p lang="mr">{recommendation.explanations.mr}</p>}{missingInputs && missingInputs.length > 0 && <p>Missing: {missingInputs.join(", ")}</p>}{recommendation.dataBasis && <p>Decision basis: {recommendation.dataBasis.replaceAll("_", " ")}{recommendation.scheduleIntervalDays ? ` · ${recommendation.scheduleIntervalDays}-day source schedule` : ""}</p>}{recommendation.weatherLimitations?.map((limitation) => <p key={limitation}>{limitation}</p>)}{recommendation.source?.sourceUri && <p>Source: <a href={recommendation.source.sourceUri} target="_blank" rel="noreferrer">{recommendation.source.documentTitle ?? recommendation.source.publisher ?? "Agricultural guidance"}</a>{recommendation.source.pageOrSection && ` · ${recommendation.source.pageOrSection}`}{recommendation.source.sourceRegion && ` · ${recommendation.source.sourceRegion}`}{recommendation.source.reviewStatus && ` · ${recommendation.source.reviewStatus.replaceAll("_", " ")}`}</p>}{recommendation.evidence?.map((evidence, index) => <p key={`${evidence.source.sourceUri}-${index}`}>Evidence: {evidence.claim} <a href={evidence.source.sourceUri ?? undefined} target="_blank" rel="noreferrer">{evidence.source.documentTitle ?? evidence.source.publisher ?? "Source"}</a>{evidence.source.reviewStatus && ` · ${evidence.source.reviewStatus.replaceAll("_", " ")}`}</p>)}</div></article>;
 }

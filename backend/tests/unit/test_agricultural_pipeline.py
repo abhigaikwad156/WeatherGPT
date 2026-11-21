@@ -14,10 +14,18 @@ from app.agriculture.thresholds import (
     IrrigationProfileSource,
     IrrigationSoilMoisture,
 )
-from app.agriculture.types import DecisionType, DecisionValue, WeatherSnapshot
+from app.agriculture.types import (
+    Decision,
+    DecisionType,
+    DecisionValue,
+    RiskLevel,
+    WeatherSnapshot,
+)
 from app.api.v1.routes import conversations as conversation_route
 from app.conversation.agricultural_pipeline import (
     AgriculturalChatPipeline,
+    AgriculturalPipelineResult,
+    ExtractedEntities,
     FarmerContext,
     WeatherContext,
 )
@@ -38,7 +46,15 @@ USER_ID = uuid4()
 class FarmerTool:
     def get_context(self, user_id: object, farm_id: object, crop: str | None) -> FarmerContext:
         return FarmerContext(
-            FARM_ID, "Green Farm", "Pune", "loam", "drip", 40, "soybean", "vegetative"
+            FARM_ID,
+            "Green Farm",
+            "Pune",
+            "loam",
+            "drip",
+            40,
+            "soybean",
+            "vegetative",
+            region="Pune",
         )
 
 
@@ -72,6 +88,10 @@ def engine() -> AgriculturalDecisionEngine:
                     source=IrrigationProfileSource(
                         publisher="Test Agriculture Department",
                         document_title="Test irrigation profile",
+                        source_uri="https://example.invalid/test-profile",
+                        page_or_section="Test section",
+                        source_region="Pune",
+                        review_status="approved",
                         reviewed_by="Test agronomist",
                     ),
                 ),
@@ -95,7 +115,11 @@ def pipeline(retrieval: RetrievalService | None = None) -> AgriculturalChatPipel
 
 def test_five_farmer_questions_run_through_tools_and_engine() -> None:
     questions = (
-        ("Should I irrigate my soybean tomorrow?", DecisionType.IRRIGATION, DecisionValue.WAIT),
+        (
+            "Should I irrigate my soybean tomorrow?",
+            DecisionType.IRRIGATION,
+            DecisionValue.DO_NOT_IRRIGATE,
+        ),
         ("Should I spray my soybean?", DecisionType.SPRAYING, DecisionValue.WAIT),
         ("Can I sow soybean now?", DecisionType.SOWING_WINDOW, DecisionValue.SUITABLE),
         ("Is there extreme weather risk?", DecisionType.EXTREME_WEATHER, DecisionValue.NEEDS_INPUT),
@@ -257,9 +281,7 @@ def test_general_agriculture_question_without_farm_uses_rag_and_returns_citation
     conversation, message, _intent, result = conversation_service.handle_message(
         FakeSession(),
         USER_ID,
-        ConversationMessageRequest(
-            content="What are the stages of sugarcane?", language="en"
-        ),
+        ConversationMessageRequest(content="What are the stages of sugarcane?", language="en"),
     )
 
     assert conversation.id is not None
@@ -318,6 +340,90 @@ def test_general_agriculture_question_without_sources_returns_fallback_without_g
         "so I can't provide a source-grounded answer."
     )
     assert result.citations == []
+
+
+def test_irrigation_chat_uses_deterministic_text_and_persists_without_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    farmer = FarmerContext(
+        FARM_ID,
+        "Green Farm",
+        "Pune, Maharashtra",
+        "Black Soil",
+        "Drip",
+        None,
+        "Sugarcane",
+        "tillering",
+        100,
+        farmer_crop_id=uuid4(),
+        region="Maharashtra",
+    )
+    decision = Decision(
+        DecisionType.IRRIGATION,
+        DecisionValue.NEEDS_INPUT,
+        RiskLevel.UNKNOWN,
+        0,
+        ("A Maharashtra schedule needs review.",),
+        metadata={"applicable_crop_stage": "tillering", "missing_inputs": ["growth_stage"]},
+        explanations={
+            "en": "NEEDS_INPUT: The profile needs review.",
+            "mr": "अधिक माहिती आवश्यक: नियमाची पडताळणी आवश्यक आहे.",
+        },
+    )
+    pipeline_result = AgriculturalPipelineResult(
+        ExtractedEntities(
+            "Pune, Maharashtra", "Sugarcane", "tillering", DecisionType.IRRIGATION, True
+        ),
+        farmer,
+        WeatherContext(None, None, None, None, None),
+        decision,
+        (),
+        "अधिक माहिती आवश्यक: नियमाची पडताळणी आवश्यक आहे.",
+        datetime.now(UTC),
+    )
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.items: list[object] = []
+
+        def add(self, item: object) -> None:
+            self.items.append(item)
+
+        def scalar(self, _statement: object) -> None:
+            return None
+
+        def flush(self) -> None:
+            for item in self.items:
+                if isinstance(item, (Conversation, Message)) and item.id is None:
+                    item.id = uuid4()
+
+    class Pipeline:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def answer(self, *_args: object, **_kwargs: object) -> AgriculturalPipelineResult:
+            return pipeline_result
+
+    class UnexpectedGemini:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            raise AssertionError("Irrigation decisions must not be rewritten by an LLM")
+
+    session = FakeSession()
+    monkeypatch.setattr(conversation_service, "AgriculturalChatPipeline", Pipeline)
+    monkeypatch.setattr(conversation_service, "_retrieval_service", lambda _session: object())
+    monkeypatch.setattr(conversation_service, "GeminiChatService", UnexpectedGemini)
+
+    _conversation, message, _intent, result = conversation_service.handle_message(
+        session,
+        USER_ID,
+        ConversationMessageRequest(
+            content="Should I irrigate my sugarcane?", language="mr", farm_id=FARM_ID
+        ),
+    )
+
+    assert message.content == pipeline_result.explanation
+    assert result is pipeline_result
+    assert any(getattr(item, "recommendation_type", None) == "irrigation" for item in session.items)
 
 
 def test_conversation_route_returns_service_unavailable_for_database_errors(

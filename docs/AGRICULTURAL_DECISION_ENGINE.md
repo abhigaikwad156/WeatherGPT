@@ -8,7 +8,7 @@ weather data and farm/crop context and returns structured `Decision` objects.
 
 Each result includes:
 
-- `decision`: the operational outcome (`APPLY`, `WAIT`, `SUITABLE`, `NOT_SUITABLE`,
+- `decision`: the operational outcome (`IRRIGATE`, `DO_NOT_IRRIGATE`, `APPLY`, `WAIT`, `SUITABLE`, `NOT_SUITABLE`,
   `HIGH_RISK`, `LOW_RISK`, or `NEEDS_INPUT`)
 - `risk_level`
 - `confidence`: confidence in the rule evaluation, not a statistical probability
@@ -22,12 +22,14 @@ or add weather facts that were not supplied by a trusted weather provider.
 
 ## Configuration and scientific safety
 
-Rules other than irrigation are configured in
+Rules and evidence are configured in
 [`agricultural_thresholds.json`](../backend/app/agriculture/data/agricultural_thresholds.json).
-The shipped file intentionally contains `null` values and no irrigation profiles. This avoids
-presenting universal agronomic thresholds as scientific facts. A deployment must populate
-profiles only with values reviewed for their crop, growth stage, soil type, region,
-irrigation practice, and sensor contract.
+The shipped file contains no active Maharashtra Sugarcane thresholds. It records the
+TNAU drip schedule as Tamil Nadu supporting evidence and as a Maharashtra candidate that
+cannot be used until an agronomist approves its local applicability. The retrieved MPKV
+bulletin and DARE/ICAR report are recorded as evidence, not decision rules. Historical
+numeric records remain inactive because their sources or sensor contracts could not be
+verified.
 
 An unset value disables that rule. The engine returns `NEEDS_INPUT` rather than silently
 falling back to a guessed threshold. Tests inject explicit fixture-only
@@ -36,25 +38,50 @@ To deploy reviewed values separately from the packaged defaults, set
 `AGRICULTURAL_THRESHOLDS_PATH` to a UTF-8 JSON file. Each enabled top-level threshold must
 have a matching `source_notes` entry named after its JSON field; each enabled crop profile
 requires `source_notes.crop_profiles.<crop>`. Invalid ranges and untraced values fail at
-load time. An irrigation profile additionally requires publisher, document title, reviewer,
-measurement basis and sensor depth when a soil-moisture threshold is enabled, and a positive
-forecast horizon when a rainfall threshold is enabled. No agronomic values are supplied by
-the application; they must be reviewed for the deployment's actual conditions.
+load time. Irrigation profiles require crop, stage, soil, method, region, source URI,
+publisher, source title, source region, and a page or section citation. A profile is actionable
+only with `review_status: "approved"`, a named reviewer, and a current effective date.
+Soil-moisture rules also require a measurement basis, sensor depth, and a reviewed maximum
+measurement age. Schedule rules require source-stated intervals and all source applicability
+conditions; they use the crop's recorded last-irrigation date. An unset rule never falls back
+to an LLM-generated value.
 
 ## Rules
 
 ### Irrigation
 
-The engine first selects one unambiguous, crop-specific irrigation profile. Profiles can be
-scoped by growth stage, soil type, irrigation type, and region; there is no global irrigation
-fallback. A profile also records its soil-moisture measurement basis and sensor depth, its
-forecast horizon, and reviewable source metadata. A profile must identify a reviewer and cannot
-be effective in the future before it is eligible for a decision.
+The engine requires crop, crop age, recorded stage, soil, irrigation method, and region for
+Sugarcane. Crop age is calculated from planting date, but a missing or unrecognized growth
+stage is requested rather than inferred. Profile matching also checks drip layout and recorded
+emitter/lateral specifications when the source requires them.
 
-The engine returns `NEEDS_INPUT` when no profile matches, either numerical threshold remains
-null, or soil-moisture or forecast-rainfall evidence is missing. It waits when soil moisture
-is at or above the profile sufficiency threshold, or forecast rainfall meets the profile
-lookahead threshold; only then can it recommend applying irrigation.
+The operational outcomes are `IRRIGATE`, `DO_NOT_IRRIGATE`, and `NEEDS_INPUT`. A fresh
+soil-moisture measurement is considered only when the approved profile states a maximum
+measurement age, basis, and sensor depth. Rainfall affects a decision only when a reviewed
+rainfall rule exists and complete, fresh rainfall data covers its entire horizon. Otherwise the
+response explicitly identifies the weather limitation. If soil moisture is absent or stale, an
+approved, fully applicable source schedule can be used; it is labeled `source_schedule` and
+requires the last-irrigated date. Sensor-based and schedule-based decisions are distinguished
+in the response.
+
+The retrieved TNAU page gives a paired-row drip interval of once every three days based on
+evapotranspiration demand and separately describes daily or alternate-day irrigation for a pit
+method. These methods are kept separate. The paired-row passage also lists a specific lateral
+and emitter configuration. Because this guidance is Tamil Nadu-specific and no reviewed
+Maharashtra rule corroborating it was found, it remains `supporting_only`; it cannot produce
+an irrigation instruction for a Maharashtra farm. The TNAU stage-wise conventional intervals
+and IW/CPE ratios are retained as evidence only and are not transferred to drip or Black Soil.
+The separate TNAU Sustainable Sugarcane Initiative passage gives daily or once-in-three-days
+drip scheduling based on soil type without mapping soil types to an interval; this remains a
+distinct supporting claim. TNAU's FAQ rainfall range is recorded as seasonal context, not as an
+irrigation or rainfall-deferral threshold.
+
+The recommendation API and dashboard upsert the latest irrigation decision for each farm
+and crop into the existing `recommendations` table. The dashboard renders decisions and
+missing inputs, and the crop/farm forms can record growth stage, last irrigation, moisture
+measurement time, and drip setup. Irrigation chat uses RAG citations as supporting evidence
+but returns the deterministic bilingual explanation directly; Gemini is not allowed to rewrite
+or override an irrigation verdict.
 
 ### Spraying
 

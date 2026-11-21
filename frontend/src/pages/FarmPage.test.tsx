@@ -48,8 +48,12 @@ beforeEach(() => {
     longitude: 73.8567,
     area_hectares: 2,
     soil_type: null,
+    region: null,
     irrigation_type: null,
-    soil_moisture_percent: null
+    irrigation_layout: null,
+    irrigation_configuration: null,
+    soil_moisture_percent: null,
+    soil_moisture_measured_at: null
   });
 });
 
@@ -75,8 +79,12 @@ test("saves only the confirmed map coordinates and resolved location name", asyn
       location_name: "Pune, Maharashtra",
       area_hectares: 2,
       soil_type: undefined,
+      region: undefined,
       irrigation_type: undefined,
-      soil_moisture_percent: undefined
+      irrigation_layout: undefined,
+      irrigation_configuration: {},
+      soil_moisture_percent: undefined,
+      soil_moisture_measured_at: undefined
     })
   );
   expect(weatherGptApi.getFarms).toHaveBeenCalledTimes(2);

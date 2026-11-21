@@ -89,18 +89,53 @@ export const weatherGptApi = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
-  createCrop: (farmId: string, payload: { name: string; variety?: string; sowing_date?: string; growth_stage?: string }) =>
+  createCrop: (farmId: string, payload: {
+    name: string;
+    variety?: string;
+    sowing_date?: string;
+    growth_stage?: string;
+    last_irrigated_at?: string | null;
+  }) =>
     request<Crop>(`/farms/${farmId}/crops`, { method: "POST", body: JSON.stringify(payload) }),
+  updateCrop: (
+    farmId: string,
+    cropId: string,
+    payload: {
+      sowing_date?: string | null;
+      growth_stage?: string | null;
+      last_irrigated_at?: string | null;
+    }
+  ) =>
+    request<Crop>(`/farms/${farmId}/crops/${cropId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
   createFarm: (payload: {
     name: string;
     latitude: number;
     longitude: number;
     area_hectares?: number;
     soil_type?: string;
+    region?: string;
     irrigation_type?: string;
+    irrigation_layout?: string;
+    irrigation_configuration?: Record<string, number>;
     soil_moisture_percent?: number;
+    soil_moisture_measured_at?: string | null;
     location_name?: string;
   }) => request<Farm>("/farms", { method: "POST", body: JSON.stringify(payload) }),
+  updateFarm: (
+    farmId: string,
+    payload: {
+      soil_type?: string | null;
+      region?: string | null;
+      irrigation_type?: string | null;
+      irrigation_layout?: string | null;
+      irrigation_configuration?: Record<string, number> | null;
+      soil_moisture_percent?: number | null;
+      soil_moisture_measured_at?: string | null;
+    }
+  ) => request<Farm>(`/farms/${farmId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   getCrops: () => request<unknown>("/farmer-crops"),
   getWeather: () => request<unknown>("/weather"),
   getRecommendations: () => request<RecommendationsResponse>("/recommendations"),

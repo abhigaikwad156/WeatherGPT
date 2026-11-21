@@ -55,6 +55,21 @@ def send_message(
             reasons=list(agricultural_result.decision.reasons),
             deterministic=agricultural_result.decision.deterministic,
             citations=agricultural_result.citations,
+            source=agricultural_result.decision.metadata.get("source"),
+            evidence=agricultural_result.decision.metadata.get("evidence", []),
+            explanations=agricultural_result.decision.explanations,
+            data_basis=agricultural_result.decision.metadata.get("data_basis"),
+            weather_limitations=agricultural_result.decision.metadata.get(
+                "weather_limitations", []
+            ),
+            schedule_interval_days=agricultural_result.decision.metadata.get(
+                "schedule_interval_days"
+            ),
+            applicable_crop_stage=agricultural_result.decision.metadata.get(
+                "applicable_crop_stage"
+            ),
+            crop_age_days=agricultural_result.decision.metadata.get("crop_age_days"),
+            missing_inputs=agricultural_result.decision.metadata.get("missing_inputs", []),
         )
     metadata = WeatherMetadata(
         intent=intent.value,

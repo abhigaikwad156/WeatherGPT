@@ -33,6 +33,35 @@ export interface RecommendationItem {
   summary: string;
   decisionVersion: string;
   decision?: string;
+  reasons?: string[];
+  applicableCropStage?: string | null;
+  cropAgeDays?: number | null;
+  source?: DecisionSource | null;
+  evidence?: DecisionEvidence[];
+  explanations?: Record<string, string>;
+  dataBasis?: string | null;
+  weatherLimitations?: string[];
+  scheduleIntervalDays?: number | null;
+  missingInputs?: string[];
+}
+
+export interface DecisionSource {
+  publisher: string | null;
+  documentTitle: string | null;
+  sourceUri: string | null;
+  pageOrSection?: string | null;
+  sourceRegion?: string | null;
+  reviewStatus?: string | null;
+  reviewedBy?: string | null;
+  effectiveFrom?: string | null;
+  effectiveUntil?: string | null;
+}
+
+export interface DecisionEvidence {
+  claim: string;
+  applicableCropStage?: string | null;
+  irrigationType?: string | null;
+  source: DecisionSource;
 }
 
 export interface DecisionRecommendation {
@@ -45,6 +74,15 @@ export interface DecisionRecommendation {
   confidence: number;
   status: "available" | "needs_input";
   reasons: string[];
+  applicableCropStage?: string | null;
+  cropAgeDays?: number | null;
+  source?: DecisionSource | null;
+  evidence?: DecisionEvidence[];
+  explanations?: Record<string, string>;
+  dataBasis?: string | null;
+  weatherLimitations?: string[];
+  scheduleIntervalDays?: number | null;
+  missingInputs?: string[];
 }
 
 export interface FarmRecommendations {
@@ -87,8 +125,12 @@ export interface Farm {
   longitude: number;
   area_hectares: number | null;
   soil_type: string | null;
+  region: string | null;
   irrigation_type: string | null;
+  irrigation_layout: string | null;
+  irrigation_configuration: Record<string, number> | null;
   soil_moisture_percent: number | null;
+  soil_moisture_measured_at: string | null;
 }
 
 export interface CurrentLocation {
@@ -137,6 +179,7 @@ export interface Crop {
   variety: string | null;
   sowing_date: string | null;
   growth_stage: string | null;
+  last_irrigated_at: string | null;
   is_active: boolean;
 }
 
@@ -243,6 +286,10 @@ export interface ChatMessage {
       reasons: string[];
       deterministic: boolean;
       citations: ChatSource[];
+      source?: DecisionSource | null;
+      applicableCropStage?: string | null;
+      cropAgeDays?: number | null;
+      missingInputs?: string[];
     };
     knowledgeSources?: ChatSource[];
   };

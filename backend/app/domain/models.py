@@ -153,11 +153,15 @@ class Farm(TimestampMixin, Base):
         Geography(geometry_type="POINT", srid=4326, spatial_index=False), nullable=False
     )
     location_name: Mapped[str | None] = mapped_column(String(160))
+    region: Mapped[str | None] = mapped_column(String(120))
     location_accuracy_meters: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     area_hectares: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     soil_type: Mapped[str | None] = mapped_column(String(80))
     irrigation_type: Mapped[str | None] = mapped_column(String(80))
+    irrigation_layout: Mapped[str | None] = mapped_column(String(80))
+    irrigation_configuration: Mapped[dict[str, object] | None] = mapped_column(JSONB())
     soil_moisture_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    soil_moisture_measured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     owner: Mapped[User] = relationship(back_populates="farms")
     farmer_crops: Mapped[list["FarmerCrop"]] = relationship(
@@ -210,6 +214,7 @@ class FarmerCrop(TimestampMixin, Base):
     variety: Mapped[str | None] = mapped_column(String(120))
     growth_stage: Mapped[str | None] = mapped_column(String(80))
     planted_at: Mapped[date | None] = mapped_column(Date())
+    last_irrigated_at: Mapped[date | None] = mapped_column(Date())
     harvested_at: Mapped[date | None] = mapped_column(Date())
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 

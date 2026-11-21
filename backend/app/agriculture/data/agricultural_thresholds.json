@@ -1,10 +1,206 @@
 {
   "crop_profiles": {},
-  "irrigation_profiles": [],
+  "irrigation_profiles": [
+    {
+      "crop": "sugarcane",
+      "growth_stage": "all_stages",
+      "soil_type": "black soil",
+      "irrigation_type": "drip",
+      "region": "Maharashtra",
+      "irrigation_layout": "paired_row",
+      "required_configuration": {
+        "lateral_diameter_mm": 12,
+        "lateral_spacing_cm": 240,
+        "emitter_flow_lph": 8,
+        "emitter_spacing_cm": 75,
+        "lateral_length_m": {
+          "min": 30,
+          "max": 40
+        }
+      },
+      "schedule": {
+        "interval_days": 3,
+        "trigger": "ET demand"
+      },
+      "source": {
+        "publisher": "Tamil Nadu Agricultural University (TNAU)",
+        "document_title": "Sugarcane Irrigation Management",
+        "source_uri": "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_sugarcane.html",
+        "page_or_section": "Sugarcane Water Management; paired-row drip irrigation",
+        "source_region": "Maharashtra",
+        "evidence_claim": "The paired-row drip passage states irrigation once in three days based on evapotranspiration demand, for the described system configuration.",
+        "review_status": "supporting_only"
+      }
+    }
+  ],
+  "irrigation_evidence": [
+    {
+      "crop": "sugarcane",
+      "claim": "For the conventional stage schedule, the TNAU page gives tillering as 36-100 days after planting and intervals of 8 days on sandy soil or 10 days on clay soil. The passage is not identified as a drip schedule and is Tamil Nadu guidance only.",
+      "applicable_crop_stage": "tillering; 36-100 days after planting",
+      "irrigation_type": "conventional schedule; method not specified in the retrieved table",
+      "source": {
+        "publisher": "Tamil Nadu Agricultural University (TNAU)",
+        "document_title": "Sugarcane Irrigation Management",
+        "source_uri": "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_sugarcane.html",
+        "page_or_section": "Sugarcane Water Management; stage-wise irrigation interval table",
+        "source_region": "Maharashtra",
+        "evidence_claim": "The stage-wise interval table lists 8 days for sandy and 10 days for clay soil during tillering.",
+        "review_status": "supporting_only"
+      }
+    },
+    {
+      "crop": "sugarcane",
+      "claim": "For the conventional stage schedule, the TNAU page gives grand growth as 101-270 days after planting and intervals of 8 days on sandy soil or 10 days on clay soil. These values are not transferred to Maharashtra Black Soil or drip irrigation.",
+      "applicable_crop_stage": "grand growth; 101-270 days after planting",
+      "irrigation_type": "conventional schedule; method not specified in the retrieved table",
+      "source": {
+        "publisher": "Tamil Nadu Agricultural University (TNAU)",
+        "document_title": "Sugarcane Irrigation Management",
+        "source_uri": "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_sugarcane.html",
+        "page_or_section": "Sugarcane Water Management; stage-wise irrigation interval table",
+        "source_region": "Maharashtra",
+        "evidence_claim": "The stage-wise interval table lists 8 days for sandy and 10 days for clay soil during grand growth.",
+        "review_status": "supporting_only"
+      }
+    },
+    {
+      "crop": "sugarcane",
+      "claim": "For the conventional stage schedule, the TNAU page gives maturity as 271 days to harvest and intervals of 10 days on sandy soil or 14 days on clay soil. These values are not transferred to Maharashtra Black Soil or drip irrigation.",
+      "applicable_crop_stage": "maturity; 271 days after planting to harvest",
+      "irrigation_type": "conventional schedule; method not specified in the retrieved table",
+      "source": {
+        "publisher": "Tamil Nadu Agricultural University (TNAU)",
+        "document_title": "Sugarcane Irrigation Management",
+        "source_uri": "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_sugarcane.html",
+        "page_or_section": "Sugarcane Water Management; stage-wise irrigation interval table",
+        "source_region": "Maharashtra",
+        "evidence_claim": "The stage-wise interval table lists 10 days for sandy and 14 days for clay soil during maturity.",
+        "review_status": "supporting_only"
+      }
+    },
+    {
+      "crop": "sugarcane",
+      "claim": "The TNAU page lists IW/CPE ratios of 0.75 during tillering, 0.75 during grand growth, and 0.50 during maturity. The retrieved evidence does not establish a Maharashtra drip application rule from these ratios.",
+      "applicable_crop_stage": "tillering, grand growth, and maturity",
+      "irrigation_type": "method not specified in the retrieved passage",
+      "source": {
+        "publisher": "Tamil Nadu Agricultural University (TNAU)",
+        "document_title": "Sugarcane Irrigation Management",
+        "source_uri": "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_sugarcane.html",
+        "page_or_section": "Sugarcane Water Management; IW/CPE ratio guidance",
+        "source_region": "Maharashtra",
+        "evidence_claim": "The listed IW/CPE ratios are 0.75, 0.75, and 0.50 for tillering, grand growth, and maturity.",
+        "review_status": "supporting_only"
+      }
+    },
+    {
+      "crop": "sugarcane",
+      "claim": "For germination (0-35 days after planting), the TNAU page describes shallow wetting of 2-3 cm at shorter intervals, especially for sandy soil, but the retrieved passage does not state a fixed interval.",
+      "applicable_crop_stage": "germination; 0-35 days after planting",
+      "irrigation_type": "method not specified in the retrieved passage",
+      "source": {
+        "publisher": "Tamil Nadu Agricultural University (TNAU)",
+        "document_title": "Sugarcane Irrigation Management",
+        "source_uri": "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_sugarcane.html",
+        "page_or_section": "Sugarcane Water Management; germination-stage guidance",
+        "source_region": "Maharashtra",
+        "evidence_claim": "The passage describes shallow 2-3 cm wetting and shorter intervals, particularly for sandy soil.",
+        "review_status": "supporting_only"
+      }
+    },
+    {
+      "crop": "sugarcane",
+      "claim": "For the described paired-row drip setup, the TNAU guidance says irrigation once in three days based on evapotranspiration demand. Its applicability details include 12 mm laterals, 240 cm lateral spacing, 8 LPH emitters at 75 cm spacing, and 30-40 m laterals. This is Tamil Nadu guidance and is not approved as a Maharashtra recommendation.",
+      "applicable_crop_stage": "all stages; the source does not give a stage-specific drip interval",
+      "irrigation_type": "drip",
+      "source": {
+        "publisher": "Tamil Nadu Agricultural University (TNAU)",
+        "document_title": "Sugarcane Irrigation Management",
+        "source_uri": "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_sugarcane.html",
+        "page_or_section": "Sugarcane Water Management; paired-row drip irrigation",
+        "source_region": "Maharashtra",
+        "evidence_claim": "The paired-row drip passage states irrigation once in three days based on evapotranspiration demand, for the described system configuration.",
+        "review_status": "supporting_only"
+      }
+    },
+    {
+      "crop": "sugarcane",
+      "claim": "The same TNAU page describes daily or alternate-day irrigation for a separate pit-drip method. The different schedule is retained as a distinct method and is not generalized to paired-row drip or Maharashtra.",
+      "applicable_crop_stage": "not stage-specific in the retrieved passage",
+      "irrigation_type": "pit drip",
+      "source": {
+        "publisher": "Tamil Nadu Agricultural University (TNAU)",
+        "document_title": "Sugarcane Irrigation Management",
+        "source_uri": "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_sugarcane.html",
+        "page_or_section": "Sugarcane Water Management; pit method drip irrigation",
+        "source_region": "Maharashtra",
+        "evidence_claim": "The separate pit-drip passage describes daily or alternate-day irrigation.",
+        "review_status": "supporting_only"
+      }
+    },
+    {
+      "crop": "sugarcane",
+      "claim": "TNAU's Sustainable Sugarcane Initiative says drip irrigation may be scheduled daily or once in three days based on soil type, but the passage does not map soil types to intervals or specify a growth-stage schedule. This remains Tamil Nadu supporting evidence, not an approved Maharashtra rule.",
+      "applicable_crop_stage": "not specified in the retrieved passage",
+      "irrigation_type": "drip",
+      "source": {
+        "publisher": "Tamil Nadu Agricultural University (TNAU)",
+        "document_title": "TNAU Sustainable Sugarcane Initiative",
+        "source_uri": "https://agritech.tnau.ac.in/SSI/ssi_technology_eng.html",
+        "page_or_section": "Drip Irrigation and fertigation",
+        "source_region": "Maharashtra",
+        "evidence_claim": "The SSI passage gives daily or once-in-three-days drip scheduling based on soil type, without assigning an interval to a particular soil.",
+        "review_status": "supporting_only"
+      }
+    },
+    {
+      "crop": "sugarcane",
+      "claim": "TNAU's FAQ describes 1100-1500 mm as adequate total rainfall when distribution is suitable, with more rain during vegetative growth and drier conditions during ripening. This is general rainfall context, not an irrigation deferral threshold.",
+      "applicable_crop_stage": "vegetative growth and ripening",
+      "source": {
+        "publisher": "Tamil Nadu Agricultural University (TNAU)",
+        "document_title": "TNAU Expert System for Sugarcane - Frequently Asked Questions",
+        "source_uri": "https://agritech.tnau.ac.in/expert_system/sugar/faq.html",
+        "page_or_section": "FAQ: rainfall requirement for cultivating sugarcane",
+        "source_region": "Maharashtra",
+        "evidence_claim": "The FAQ gives a total rainfall range with a distribution caveat and does not provide an irrigation trigger.",
+        "review_status": "supporting_only"
+      }
+    },
+    {
+      "crop": "sugarcane",
+      "claim": "The MPKV/KVK Mohol-Solapur agromet bulletin reports weather forecasts and recommends a 15 October-30 November planting window for pre-seasonal sugarcane; the retrieved bulletin does not provide an irrigation interval or soil-moisture threshold.",
+      "irrigation_type": null,
+      "source": {
+        "publisher": "MPKV, Rahuri / KVK Mohol-Solapur",
+        "document_title": "Weather-based Agromet Advisory Bulletin, 14 November 2024",
+        "source_uri": "https://mpkv.ac.in/Uploads/Weather/Solapur%20English%2014.11.2024_20241115084032.pdf",
+        "page_or_section": "Sugarcane pre-seasonal planting advisory and weather forecast table",
+        "source_region": "Satara, Maharashtra",
+        "evidence_claim": "The retrieved bulletin did not provide an irrigation interval or soil-moisture threshold.",
+        "review_status": "verified_no_irrigation_rule"
+      }
+    },
+    {
+      "crop": "sugarcane",
+      "claim": "The DARE/ICAR annual report reports about 40% water savings from drip compared with furrow irrigation; this is comparative evidence, not an irrigation interval, rainfall threshold, or soil-moisture trigger.",
+      "irrigation_type": "drip",
+      "source": {
+        "publisher": "Department of Agricultural Research and Education (DARE) / ICAR",
+        "document_title": "Annual Report 2008-09",
+        "source_uri": "https://dare.gov.in/",
+        "page_or_section": "Sugarcane crop-management RAG excerpt; page number absent from indexed metadata",
+        "source_region": "India",
+        "evidence_claim": "The retrieved report excerpt is comparative water-saving evidence, not an irrigation trigger or schedule.",
+        "review_status": "supporting_only"
+      }
+    }
+  ],
   "source_notes": {
-    "unconfigured_irrigation_profile_1": "Original inactive record preserved: crop=sugarcane; region=Maharashtra; growth_stage=all_stages; soil_type=medium_deep_black_soil; irrigation_type=subsurface_drip; soil_moisture_sufficient_percent=60.0; soil_moisture_operator=equal_etc_replenishment; soil_moisture_measurement_basis=crop_evapotranspiration_etc; soil_moisture_sensor_depth=null; forecast_rainfall_threshold_mm=null; forecast_rainfall_horizon_hours=null; publisher=Mahatma Phule Krishi Vidyapeeth (MPKV), Rahuri; document_title=Adoption of recommendations released by MPKV Rahuri for sugarcane; publication_year=2026; source_location=Western Maharashtra; source_url=https://www.agronomyjournals.com/archives/2026/vol9issue1S/PartC/S-9-1-40-992.pdf; reviewer=PENDING AGRONOMIST REVIEW; effective_date=null",
-    "unconfigured_irrigation_profile_2": "Original inactive record preserved: crop=sugarcane; region=Scarcity Zone, Maharashtra; growth_stage=tillering_45_to_135_dap; soil_type=heavy_deep_black_soil; irrigation_type=surface_furrow; soil_moisture_sufficient_percent=100.0; soil_moisture_operator=equal_etc_replenishment; soil_moisture_measurement_basis=full_irrigation_requirement; soil_moisture_sensor_depth=null; forecast_rainfall_threshold_mm=null; forecast_rainfall_horizon_hours=null; publisher=Mahatma Phule Krishi Vidyapeeth (MPKV), Rahuri; document_title=Sugarcane irrigation recommendations for scarcity zone conditions; publication_year=2026; source_location=Scarcity Zone, Maharashtra; source_url=https://www.agronomyjournals.com/archives/2026/vol9issue1S/PartC/S-9-1-40-992.pdf; reviewer=PENDING AGRONOMIST REVIEW; effective_date=null",
-    "unconfigured_irrigation_profile_3": "Original inactive record preserved: crop=sugarcane; region=Scarcity Zone, Maharashtra; growth_stage=grand_growth_136_to_300_dap; soil_type=heavy_deep_black_soil; irrigation_type=surface_furrow; soil_moisture_sufficient_percent=70.0; soil_moisture_operator=equal_etc_replenishment; soil_moisture_measurement_basis=30_percent_water_deficit; soil_moisture_sensor_depth=null; forecast_rainfall_threshold_mm=null; forecast_rainfall_horizon_hours=null; publisher=Mahatma Phule Krishi Vidyapeeth (MPKV), Rahuri; document_title=Sugarcane irrigation recommendations for scarcity zone conditions; publication_year=2026; source_location=Scarcity Zone, Maharashtra; source_url=https://www.agronomyjournals.com/archives/2026/vol9issue1S/PartC/S-9-1-40-992.pdf; reviewer=PENDING AGRONOMIST REVIEW; effective_date=null",
-    "unconfigured_irrigation_profile_4": "Original inactive record preserved: crop=sugarcane; region=India (National); growth_stage=all_stages; soil_type=general_calibrated; irrigation_type=general; soil_moisture_sufficient_percent=30.0; soil_moisture_operator=greater_than; soil_moisture_measurement_basis=available_soil_moisture_asm; soil_moisture_sensor_depth=null; forecast_rainfall_threshold_mm=null; forecast_rainfall_horizon_hours=null; publisher=ICAR-Sugarcane Breeding Institute (ICAR-SBI), Coimbatore; document_title=Digital Soil Moisture Sensor (DSMS) Technology Profile; publication_year=2024; source_location=Coimbatore, Tamil Nadu / India; source_url=https://sugarcane.res.in/?page_id=5272; reviewer=PENDING AGRONOMIST REVIEW; effective_date=null"
+    "unconfigured_irrigation_profile_1": "Unreviewed source record retained for audit only; no rule is enabled. Original values: medium/deep black soil, subsurface drip, 60% ETc, sensor depth missing, source cited as MPKV Rahuri 2026; source could not be verified in the ingested corpus.",
+    "unconfigured_irrigation_profile_2": "Unreviewed source record retained for audit only; no rule is enabled. Original values: heavy/deep black soil, surface furrow, tillering stage, 100% irrigation requirement; source could not be verified in the ingested corpus.",
+    "unconfigured_irrigation_profile_3": "Unreviewed source record retained for audit only; no rule is enabled. Original values: heavy/deep black soil, surface furrow, grand-growth stage, 70% irrigation requirement; source could not be verified in the ingested corpus.",
+    "unconfigured_irrigation_profile_4": "Unreviewed source record retained for audit only; no rule is enabled. Original value: 30% available soil moisture from ICAR-SBI DSMS technology profile; sensor depth and field applicability are unverified."
   }
 }

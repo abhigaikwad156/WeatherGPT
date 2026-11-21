@@ -28,6 +28,7 @@ class IrrigationSoilMoisture:
     sufficient_percent: float | None = None
     measurement_basis: str | None = None
     sensor_depth_cm: float | None = None
+    maximum_age_hours: float | None = None
 
 
 @dataclass(frozen=True)
@@ -45,15 +46,47 @@ class IrrigationProfileSource:
     publisher: str | None = None
     document_title: str | None = None
     source_uri: str | None = None
+    page_or_section: str | None = None
+    source_region: str | None = None
+    evidence_claim: str | None = None
+    review_status: str = "pending"
     reviewed_by: str | None = None
     effective_from: date | None = None
+    effective_until: date | None = None
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "IrrigationProfileSource":
         values = dict(data)
-        effective_from = values.get("effective_from")
-        if effective_from is not None:
-            values["effective_from"] = date.fromisoformat(effective_from)
+        for field_name in ("effective_from", "effective_until"):
+            field_value = values.get(field_name)
+            if isinstance(field_value, str):
+                values[field_name] = date.fromisoformat(field_value)
+        return cls(**values)
+
+
+@dataclass(frozen=True)
+class IrrigationSchedule:
+    """Source-stated schedule; it is usable only after applicability review."""
+
+    interval_days: int | None = None
+    interval_options_days: tuple[int, ...] = ()
+    trigger: str | None = None
+
+
+@dataclass(frozen=True)
+class IrrigationEvidence:
+    """Retrieved/source-linked irrigation evidence that is not necessarily a rule."""
+
+    crop: str
+    claim: str
+    source: IrrigationProfileSource
+    applicable_crop_stage: str | None = None
+    irrigation_type: str | None = None
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "IrrigationEvidence":
+        values = dict(data)
+        values["source"] = IrrigationProfileSource.from_mapping(values.get("source", {}))
         return cls(**values)
 
 
@@ -71,39 +104,63 @@ class IrrigationProfile:
     soil_type: str | None = None
     irrigation_type: str | None = None
     region: str | None = None
+    irrigation_layout: str | None = None
+    required_configuration: dict[str, Any] | None = None
     soil_moisture: IrrigationSoilMoisture = IrrigationSoilMoisture()
     forecast: IrrigationForecast = IrrigationForecast()
+    schedule: IrrigationSchedule = IrrigationSchedule()
     source: IrrigationProfileSource = IrrigationProfileSource()
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "IrrigationProfile":
         values = dict(data)
-        values["soil_moisture"] = IrrigationSoilMoisture(
-            **values.get("soil_moisture", {})
-        )
+        values["soil_moisture"] = IrrigationSoilMoisture(**values.get("soil_moisture", {}))
         values["forecast"] = IrrigationForecast(**values.get("forecast", {}))
+        schedule = dict(values.get("schedule", {}))
+        schedule["interval_options_days"] = tuple(schedule.get("interval_options_days", ()))
+        values["schedule"] = IrrigationSchedule(**schedule)
         values["source"] = IrrigationProfileSource.from_mapping(values.get("source", {}))
         return cls(**values)
 
     def specificity(self) -> int:
         return sum(
             value is not None
-            for value in (self.growth_stage, self.soil_type, self.irrigation_type, self.region)
+            for value in (
+                self.growth_stage,
+                self.soil_type,
+                self.irrigation_type,
+                self.region,
+                self.irrigation_layout,
+            )
         )
 
-    def is_reviewed(self) -> bool:
-        return bool(
-            self.source.publisher
-            and self.source.document_title
-            and self.source.reviewed_by
-        ) and (
-            self.source.effective_from is None or self.source.effective_from <= date.today()
+    def review_block_reason(self, today: date | None = None) -> str | None:
+        current_date = today or date.today()
+        if self.source.effective_until is not None and self.source.effective_until < current_date:
+            return "source_expired"
+        if self.source.effective_from is not None and self.source.effective_from > current_date:
+            return "source_not_yet_effective"
+        if self.source.review_status != "approved" or not self.source.reviewed_by:
+            return "source_not_reviewed"
+        return None
+
+    def is_reviewed(self, today: date | None = None) -> bool:
+        return (
+            bool(self.source.publisher and self.source.document_title and self.source.source_uri)
+            and self.review_block_reason(today) is None
+        )
+
+    def has_numeric_thresholds(self) -> bool:
+        return (
+            self.soil_moisture.sufficient_percent is not None
+            or self.forecast.rainfall_lookahead_mm is not None
         )
 
 
 @dataclass(frozen=True)
 class AgriculturalThresholds:
     irrigation_profiles: tuple[IrrigationProfile, ...] = ()
+    irrigation_evidence: tuple[IrrigationEvidence, ...] = ()
     spray_rainfall_lookahead_mm: float | None = None
     spray_min_humidity_percent: float | None = None
     spray_max_humidity_percent: float | None = None
@@ -128,7 +185,13 @@ class AgriculturalThresholds:
         values = {
             key: value
             for key, value in data.items()
-            if key not in {"crop_profiles", "irrigation_profiles", "source_notes"}
+            if key
+            not in {
+                "crop_profiles",
+                "irrigation_profiles",
+                "irrigation_evidence",
+                "source_notes",
+            }
         }
         return cls(
             **values,
@@ -136,6 +199,10 @@ class AgriculturalThresholds:
             irrigation_profiles=tuple(
                 IrrigationProfile.from_mapping(profile)
                 for profile in data.get("irrigation_profiles", [])
+            ),
+            irrigation_evidence=tuple(
+                IrrigationEvidence.from_mapping(item)
+                for item in data.get("irrigation_evidence", [])
             ),
             source_notes=data.get("source_notes", {}),
         )
@@ -227,11 +294,30 @@ class AgriculturalThresholds:
             )
 
         for profile in self.irrigation_profiles:
-            if not profile.is_reviewed():
-                raise ValueError(
-                    f"irrigation profile for {profile.crop!r} requires publisher, "
-                    "document title, reviewer, and an eligible effective date"
+            if not all(
+                (
+                    profile.crop,
+                    profile.growth_stage,
+                    profile.soil_type,
+                    profile.irrigation_type,
+                    profile.region,
+                    profile.source.publisher,
+                    profile.source.document_title,
+                    profile.source.source_uri,
+                    profile.source.page_or_section,
+                    profile.source.source_region,
                 )
+            ):
+                raise ValueError(
+                    "irrigation profiles require crop dimensions and complete source metadata"
+                )
+            if profile.source.review_status not in {
+                "pending",
+                "supporting_only",
+                "approved",
+                "rejected",
+            }:
+                raise ValueError("irrigation profile review_status is not recognized")
             moisture = profile.soil_moisture
             if moisture.sufficient_percent is not None:
                 if not 0 <= moisture.sufficient_percent <= 100:
@@ -243,6 +329,14 @@ class AgriculturalThresholds:
                     )
                 if not math.isfinite(moisture.sensor_depth_cm) or moisture.sensor_depth_cm <= 0:
                     raise ValueError("irrigation sensor depth must be positive and finite")
+                if (
+                    moisture.maximum_age_hours is None
+                    or not math.isfinite(moisture.maximum_age_hours)
+                    or moisture.maximum_age_hours <= 0
+                ):
+                    raise ValueError(
+                        "configured soil-moisture threshold requires a positive maximum age"
+                    )
             forecast = profile.forecast
             if forecast.rainfall_lookahead_mm is not None:
                 if (
@@ -254,11 +348,43 @@ class AgriculturalThresholds:
                     raise ValueError(
                         "configured irrigation forecast threshold requires a positive horizon"
                     )
+            schedule = profile.schedule
+            if schedule.interval_days is not None and schedule.interval_days <= 0:
+                raise ValueError("irrigation schedule interval must be positive")
+            if any(value <= 0 for value in schedule.interval_options_days):
+                raise ValueError("irrigation schedule options must be positive")
+            for key, value in (profile.required_configuration or {}).items():
+                if isinstance(value, dict) and {"min", "max"} <= value.keys():
+                    if (
+                        not isinstance(value["min"], (int, float))
+                        or not isinstance(value["max"], (int, float))
+                        or not math.isfinite(value["min"])
+                        or not math.isfinite(value["max"])
+                        or value["min"] > value["max"]
+                    ):
+                        raise ValueError(
+                            f"irrigation profile configuration range {key!r} is invalid"
+                        )
+
+        for evidence in self.irrigation_evidence:
+            if not all(
+                (
+                    evidence.crop,
+                    evidence.claim,
+                    evidence.source.publisher,
+                    evidence.source.document_title,
+                    evidence.source.source_uri,
+                    evidence.source.page_or_section,
+                    evidence.source.source_region,
+                    evidence.source.review_status,
+                )
+            ):
+                raise ValueError(
+                    "irrigation evidence requires a claim and complete source metadata"
+                )
 
     @staticmethod
-    def _validate_ordered_range(
-        minimum: float | None, maximum: float | None, label: str
-    ) -> None:
+    def _validate_ordered_range(minimum: float | None, maximum: float | None, label: str) -> None:
         if minimum is not None and maximum is not None and minimum > maximum:
             raise ValueError(f"{label} minimum cannot exceed maximum")
 

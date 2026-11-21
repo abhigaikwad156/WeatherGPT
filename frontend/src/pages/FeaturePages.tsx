@@ -86,7 +86,9 @@ export function CropsPage() {
   const [crops, setCrops] = useState<Crop[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingCropId, setSavingCropId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const loadCrops = useCallback(async () => {
@@ -116,7 +118,8 @@ export function CropsPage() {
         name: String(form.get("name")).trim(),
         variety: String(form.get("variety")).trim() || undefined,
         sowing_date: String(form.get("sowingDate")).trim() || undefined,
-        growth_stage: String(form.get("growthStage")).trim() || undefined
+        growth_stage: String(form.get("growthStage")).trim() || undefined,
+        last_irrigated_at: String(form.get("lastIrrigatedAt")).trim() || undefined
       });
       setCrops((current) => [crop, ...current]);
       formRef.current?.reset();
@@ -127,11 +130,30 @@ export function CropsPage() {
     }
   };
 
+  const updateCrop = async (event: FormEvent<HTMLFormElement>, crop: Crop) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSavingCropId(crop.id);
+    setUpdateError(null);
+    try {
+      const updated = await weatherGptApi.updateCrop(crop.farm_id, crop.id, {
+        sowing_date: String(form.get("sowingDate")).trim() || null,
+        growth_stage: String(form.get("growthStage")).trim() || null,
+        last_irrigated_at: String(form.get("lastIrrigatedAt")).trim() || null
+      });
+      setCrops((current) => current.map((item) => item.id === updated.id ? updated : item));
+    } catch (caught) {
+      setUpdateError(caught instanceof Error ? caught.message : "Unable to update crop details.");
+    } finally {
+      setSavingCropId(null);
+    }
+  };
+
   useEffect(() => {
     void loadCrops();
   }, [loadCrops]);
 
-  return <div className="page"><header className="page-header"><div><p className="eyebrow">WeatherGPT</p><h1>My crops</h1><p>Track crops for your farm and unlock crop-specific advice.</p></div></header>{loading && <LoadingState label="Loading crops…" />}{error && <ErrorState message={error} retry={loadCrops} />}{!loading && !error && <>{crops.length ? <div className="stack">{crops.map((crop) => <Card key={crop.id}><p className="eyebrow">{crop.is_active ? "Active crop" : "Inactive crop"}</p><h2>{crop.name}</h2><p>{crop.variety || "Variety not set"} · {crop.growth_stage || "Growth stage not set"}</p>{crop.sowing_date && <small>Sown {crop.sowing_date}</small>}</Card>)}</div> : <Card><EmptyState title="No crops added yet" description="Add your first crop below." /></Card>}<Card><div className="card-heading"><div><p className="eyebrow">Crop details</p><h2>Add a crop</h2></div></div><form ref={formRef} className="farm-form" onSubmit={createCrop}><label>Crop name<input name="name" required minLength={2} placeholder="Onion" /></label><label>Variety<input name="variety" placeholder="Optional variety" /></label><div className="form-row"><label>Sowing date<input name="sowingDate" type="date" /></label><label>Growth stage<input name="growthStage" placeholder="Vegetative" /></label></div><button className="primary-button" disabled={saving}>{saving ? "Saving crop…" : "Save crop"}</button></form></Card></>}</div>;
+  return <div className="page"><header className="page-header"><div><p className="eyebrow">WeatherGPT</p><h1>My crops</h1><p>Track crops for your farm and unlock crop-specific advice.</p></div></header>{loading && <LoadingState label="Loading crops…" />}{error && <ErrorState message={error} retry={loadCrops} />}{!loading && !error && <>{crops.length ? <div className="stack">{crops.map((crop) => <Card key={crop.id}><p className="eyebrow">{crop.is_active ? "Active crop" : "Inactive crop"}</p><h2>{crop.name}</h2><p>{crop.variety || "Variety not set"} · {crop.growth_stage || "Growth stage not set"}</p>{crop.sowing_date && <small>Sown {crop.sowing_date}</small>}<form className="farm-form crop-irrigation-form" onSubmit={(event) => updateCrop(event, crop)}><div className="form-row"><label>Sowing date<input name="sowingDate" type="date" defaultValue={crop.sowing_date ?? ""} /></label><label>Growth stage<input name="growthStage" defaultValue={crop.growth_stage ?? ""} placeholder="Tillering, grand growth, or maturity" /></label></div><label>Last irrigated on<input name="lastIrrigatedAt" type="date" defaultValue={crop.last_irrigated_at ?? ""} /></label>{updateError && <p className="form-error" role="alert">{updateError}</p>}<button className="secondary-button" disabled={savingCropId === crop.id}>{savingCropId === crop.id ? "Saving…" : "Save crop and irrigation details"}</button></form></Card>)}</div> : <Card><EmptyState title="No crops added yet" description="Add your first crop below." /></Card>}<Card><div className="card-heading"><div><p className="eyebrow">Crop details</p><h2>Add a crop</h2></div></div><form ref={formRef} className="farm-form" onSubmit={createCrop}><label>Crop name<input name="name" required minLength={2} placeholder="Onion" /></label><label>Variety<input name="variety" placeholder="Optional variety" /></label><div className="form-row"><label>Sowing date<input name="sowingDate" type="date" /></label><label>Growth stage<input name="growthStage" placeholder="Tillering, grand growth, or maturity" /></label></div><label>Last irrigated on<input name="lastIrrigatedAt" type="date" /></label><button className="primary-button" disabled={saving}>{saving ? "Saving crop…" : "Save crop"}</button></form></Card></>}</div>;
 }
 
 export function WeatherPage() {
@@ -159,7 +181,7 @@ export function WeatherPage() {
 export function RecommendationsPage() {
   const state = useResource(weatherGptApi.getRecommendations);
   const data = state.data;
-  return <div className="page"><header className="page-header"><div><p className="eyebrow">Decision support</p><h1>Agricultural recommendations</h1><p>Current decisions from configured rules and your farm’s available weather data. Results are not saved as recommendations.</p></div></header>{state.loading && <LoadingState />}{state.error && <ErrorState message={state.error} retry={state.refresh} />}{!state.loading && !state.error && data && <>{data.message && <Card><p role="status">{data.message}</p>{data.farms.length === 0 && <a className="secondary-button" href="/farms">Add a farm</a>}</Card>}{data.farms.map((farm) => <Card key={farm.farmId}><div className="card-heading"><div><p className="eyebrow">{farm.weatherProvider} · weather fetched {new Date(farm.weatherFetchedAt).toLocaleString()}</p><h2>{farm.farmName}</h2></div></div><div className="stack">{farm.recommendations.map((item) => <article key={item.id} className={`recommendation-card recommendation-${item.status}`}><span className="recommendation-check" aria-hidden="true">{item.status === "available" ? "✓" : "!"}</span><div><p className="eyebrow">{item.recommendationType.replaceAll("_", " ")}{item.cropName ? ` · ${item.cropName}` : " · Farm-wide"}</p><h3>{item.status === "available" ? item.decision : "Additional inputs required"}</h3>{item.status === "available" && <p>Rule risk: {item.riskLevel} · Confidence: {Math.round(item.confidence * 100)}%</p>}<ul>{item.reasons.map((reason, index) => <li key={`${item.id}-${index}`}>{reason}</li>)}</ul></div></article>)}</div></Card>)}{data.farms.length > 0 && data.status === "available" && <Card><p>These results are computed from the latest available farm weather and configured deterministic rules. They are not stored as historical recommendations.</p></Card>}</>}</div>;
+  return <div className="page"><header className="page-header"><div><p className="eyebrow">Decision support</p><h1>Agricultural recommendations</h1><p>Current decisions from reviewed deterministic rules and your farm’s available weather data. Irrigation decisions are saved with their evidence and missing inputs.</p></div></header>{state.loading && <LoadingState />}{state.error && <ErrorState message={state.error} retry={state.refresh} />}{!state.loading && !state.error && data && <>{data.message && <Card><p role="status">{data.message}</p>{data.farms.length === 0 && <a className="secondary-button" href="/farms">Add a farm</a>}</Card>}{data.farms.map((farm) => <Card key={farm.farmId}><div className="card-heading"><div><p className="eyebrow">{farm.weatherProvider} · weather fetched {new Date(farm.weatherFetchedAt).toLocaleString()}</p><h2>{farm.farmName}</h2></div></div><div className="stack">{farm.recommendations.map((item) => <article key={item.id} className={`recommendation-card recommendation-${item.status}`}><span className="recommendation-check" aria-hidden="true">{item.status === "available" ? "✓" : "!"}</span><div><p className="eyebrow">{item.recommendationType.replaceAll("_", " ")}{item.cropName ? ` · ${item.cropName}` : " · Farm-wide"}</p><h3>{item.decision}</h3>{item.applicableCropStage && <p>Applicable crop stage: {item.applicableCropStage}{item.cropAgeDays != null ? ` · ${item.cropAgeDays} days after planting` : ""}</p>}{item.explanations?.en && <p>{item.explanations.en}</p>}{item.explanations?.mr && <p lang="mr">{item.explanations.mr}</p>}{item.status === "available" && <p>Rule risk: {item.riskLevel} · Confidence: {Math.round(item.confidence * 100)}%</p>}<ul>{item.reasons.map((reason, index) => <li key={`${item.id}-${index}`}>{reason}</li>)}</ul>{item.missingInputs?.length ? <p>Missing: {item.missingInputs.join(", ")}</p> : null}{item.weatherLimitations?.map((limitation) => <p key={limitation}>{limitation}</p>)}{item.source?.sourceUri && <p>Source: <a href={item.source.sourceUri} target="_blank" rel="noreferrer">{item.source.documentTitle ?? item.source.publisher ?? "Agricultural guidance"}</a>{item.source.pageOrSection && ` · ${item.source.pageOrSection}`}{item.source.sourceRegion && ` · ${item.source.sourceRegion}`}{item.source.reviewStatus && ` · ${item.source.reviewStatus}`}</p>}{item.evidence?.map((evidence, index) => <p key={`${item.id}-evidence-${index}`}>Evidence: {evidence.claim} <a href={evidence.source.sourceUri ?? undefined} target="_blank" rel="noreferrer">{evidence.source.documentTitle ?? evidence.source.publisher}</a></p>)}</div></article>)}</div></Card>)}</>}</div>;
 }
 
 export function AlertsPage() {

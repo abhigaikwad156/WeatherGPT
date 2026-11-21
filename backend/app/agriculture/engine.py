@@ -42,6 +42,7 @@ class AgriculturalDecisionEngine:
                 ml_prediction,
                 decision.llm_explanation,
                 decision.metadata,
+                decision.explanations,
             )
             for decision_type, decision in decisions.items()
         }

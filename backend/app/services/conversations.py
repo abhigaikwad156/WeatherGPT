@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.agriculture.engine import AgriculturalDecisionEngine
 from app.agriculture.thresholds import AgriculturalThresholds, load_default_thresholds
+from app.agriculture.types import DecisionType
 from app.conversation.agricultural_pipeline import AgriculturalChatPipeline
 from app.conversation.agricultural_tools import (
     DatabaseFarmerContextTool,
@@ -24,6 +25,7 @@ from app.rag.embeddings import create_embedding_provider
 from app.rag.postgres import PgVectorChunkRepository
 from app.rag.retrieval import RetrievalService
 from app.schemas.conversation import ConversationMessageRequest
+from app.services.recommendations import persist_irrigation_recommendation
 
 
 class ConversationNotFoundError(Exception):
@@ -70,8 +72,8 @@ def handle_message(
     agricultural_result = None
     knowledge_result = None
     retrieval_service = None
-    agricultural_question = (
-        intent == WeatherIntent.UNKNOWN or _is_agricultural_question(request.content)
+    agricultural_question = intent == WeatherIntent.UNKNOWN or _is_agricultural_question(
+        request.content
     )
     if agricultural_question:
         try:
@@ -87,6 +89,15 @@ def handle_message(
                 language=request.language,
                 farm_id=request.farm_id or conversation.farm_id,
             )
+            if agricultural_result.decision.decision_type == DecisionType.IRRIGATION:
+                persist_irrigation_recommendation(
+                    session,
+                    user_id,
+                    agricultural_result.farmer.farm_id,
+                    agricultural_result.farmer.farmer_crop_id,
+                    agricultural_result.decision,
+                    generated_at=agricultural_result.generated_at,
+                )
         except ValueError:
             agricultural_result = None
     if agricultural_question and agricultural_result is None:
@@ -107,10 +118,16 @@ def handle_message(
         if agricultural_result is not None
         else _knowledge_context(request.content, sources, result, request.language)
         if knowledge_result is not None
-        else _agricultural_help() if agricultural_question and result is None
+        else _agricultural_help()
+        if agricultural_question and result is None
         else WeatherExplanationService().explain(result, request.language)
     )
-    if agricultural_result is not None and not agricultural_result.retrieved:
+    if (
+        agricultural_result is not None
+        and agricultural_result.decision.decision_type == DecisionType.IRRIGATION
+    ):
+        explanation = agricultural_result.explanation
+    elif agricultural_result is not None and not agricultural_result.retrieved:
         explanation = agricultural_result.explanation
     elif knowledge_result is not None and not knowledge_result.citations:
         explanation = _no_verified_source_fallback(request.language)
@@ -192,8 +209,7 @@ def _no_verified_source_fallback(language: str) -> str:
     language_code = language.split("-", maxsplit=1)[0].casefold()
     if language_code == "mr":
         return (
-            "या प्रश्नासाठी संबंधित सत्यापित कृषी स्रोत सापडला नाही, "
-            "त्यामुळे मी स्रोताधारित उत्तर देऊ शकत नाही."
+            "या प्रश्नासाठी संबंधित सत्यापित कृषी स्रोत सापडला नाही, त्यामुळे मी स्रोताधारित उत्तर देऊ शकत नाही."
         )
     if language_code == "hi":
         return (

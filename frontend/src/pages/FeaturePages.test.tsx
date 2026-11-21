@@ -123,7 +123,7 @@ test("shows missing-input details when no rule can produce a decision", async ()
   render(<RecommendationsPage />);
 
   expect(await screen.findByText("No rule-based decision is available yet.")).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Additional inputs required" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "NEEDS_INPUT" })).toBeInTheDocument();
   expect(screen.getByText("No matching crop-specific irrigation profile is configured")).toBeInTheDocument();
 });
 
